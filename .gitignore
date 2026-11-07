@@ -1,0 +1,9 @@
+# Machine-local agent state. Everything else under .agents/ and .claude/ is committed.
+.gemini/
+.claude/settings.local.json
+.claude/worktrees/
+.DS_Store
+
+.venv/
+__pycache__/
+node_modules/

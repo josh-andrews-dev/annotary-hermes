@@ -1,0 +1,14 @@
+# Recorded by Copier from the repo-standard template: version (_commit), owner, tier. Read by
+# tools, not agents. Never edit by hand; `copier update` rewrites it. removed_starter_files lists
+# the starter files the repo deleted on purpose; set it with `copier update -d` (copier.yml).
+_commit: v0.15.0
+_src_path: gh:josh-andrews-dev/repo-standard
+description: 'Annotary for Hermes Agent: review your agents'' plans and documents
+    with comments, from Desktop, the Webapp and your phone'
+kinds: []
+owner: Personal
+project_name: annotary-hermes
+removed_starter_files: []
+tier: lighter
+tracker: github
+visibility: public
