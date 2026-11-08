@@ -30,9 +30,13 @@ class Profile:
     previous_names: list[str] = field(default_factory=list)
 
 
+def _yaml_scalar(v: str):
+    return {"true": True, "false": False, "null": None}.get(v.lower(), v)
+
+
 def _read_profile_yaml(path: Path) -> dict:
     """``profile.yaml`` as a dict. PyYAML when Hermes has it; else a reader for the few keys used
-    here (top-level strings, a list of strings, ``ui_meta: hermes-bots: title``)."""
+    here (top-level strings, a list of strings, the scalars under ``ui_meta: hermes-bots``)."""
     try:
         text = path.read_text(encoding="utf-8-sig")
     except OSError:
@@ -67,8 +71,8 @@ def _read_profile_yaml(path: Path) -> dict:
                 data[k] = v
         else:
             stack = stack[: max(1, indent // 2)] + [k]
-            if stack[:3] == ["ui_meta", "hermes-bots", "title"] and v:
-                data.setdefault("ui_meta", {}).setdefault("hermes-bots", {})["title"] = v
+            if stack[:2] == ["ui_meta", "hermes-bots"] and len(stack) == 3 and v:
+                data.setdefault("ui_meta", {}).setdefault("hermes-bots", {})[stack[2]] = _yaml_scalar(v)
     return data
 
 
@@ -223,6 +227,9 @@ def reconcile(root: Path | None = None) -> dict:
         st["reconciled_at"] = time.time()
 
     state.update(work, root)
+    from . import avatars  # avatars imports this module
+    for pid, what in avatars.sync(root).items():
+        note(pid, what)
     return report
 
 
