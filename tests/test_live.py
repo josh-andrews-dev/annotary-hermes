@@ -141,6 +141,7 @@ def test_only_the_editor_pushes_and_never_mid_review(hermes):
     owner_cli("act", doc, "send-back")
     ok = tools.push_version(caller("coder"), doc=doc, markdown=PLAN + "\nv2\n", message="fix")
     assert ok["version"] == 2
+    assert "answer each Thread you acted on" in ok["next"] and "Done in v2: " in ok["next"]
     th = tools.threads(caller("coder"), doc=doc)
     tid = th["threads"][0]["id"]
     tools.reply(caller("coder"), doc=doc, thread=tid, text="Fixed in v2.", resolve=True)
@@ -328,3 +329,14 @@ def test_the_dev_override_never_triggers_a_reinstall(hermes, monkeypatch, tmp_pa
     monkeypatch.setenv(install.DEV_BINARY_ENV, str(dev))
     pid = server.server_pid()
     assert server.ensure_running()["outcome"] == "running" and server.server_pid() == pid
+
+
+def test_the_wake_digest_marks_threads_waiting_for_an_answer(hermes):
+    accounts.reconcile()
+    doc = share()["id"]
+    owner_cli("thread", "new", doc, "--document", "-m", "-", stdin="Survey or interviews?")
+    owner_cli("thread", "new", doc, "--document", "-m", "-", stdin="Add a rollback step.")
+    tools.reply(caller("coder"), doc=doc, thread="t2", text="Done in v1 already: step 4.")
+    digest = watcher._thread_digest(server.owner_token(), doc, None, "coder")
+    lines = {line.split(" ")[1]: line for line in digest.splitlines() if line.startswith("- t")}
+    assert "(waiting for your answer)" in lines["t1"] and "(waiting for your answer)" not in lines["t2"]

@@ -16,14 +16,18 @@ or **Approve**. Use the `annotary_*` tools; never the `annotary` CLI through the
    its own; elsewhere give the link. Pass on `tell_the_person` once if it is there.
 3. **Wait.** A review is open while the person comments. Do not push, do not rewrite. You are
    woken when they Send back or Approve, or @mention you.
-4. Sent back: `annotary_threads`, fix everything they asked, `annotary_push_version` **once**
-   with the full new content, then `annotary_reply` on each Thread naming the new Version
-   (`fixed in v3`) with `resolve: true`.
-5. Approved: do not push. Answer open Threads, then carry on with the work.
+4. Sent back: `annotary_threads`, fix what they asked, `annotary_push_version` **once** with the
+   full new content.
+5. **After pushing, answer each Thread you acted on** with `annotary_reply`, briefly, like a
+   colleague: what changed, in which Version (`Done in v3: split the intro`), or why not
+   (`Kept: the spec fixes it`). A question gets an answer, no edit. Unclear? Ask in that Thread,
+   don't guess. `resolve: true` only on what you fully addressed.
+6. Approved: do not push. Answer every open Thread still waiting for you, then carry on.
 
 ## Rules
 
-- An @mention asks you a question: answer in that Thread with `annotary_reply`. Do not push.
+- An @mention asks you something: answer in that Thread with `annotary_reply` (or ask back if
+  it is unclear). Do not push.
 - Only the editor pushes. Not the editor? Comment, or @mention the editor (`@coder`). Hand a
   Document over with `annotary_handoff` only when the person asks.
 - `annotary_push_version` refuses mid-review; use `review_over: true` only when the person said

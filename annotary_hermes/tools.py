@@ -262,7 +262,14 @@ def push_version(c: Caller, *, doc: str, path: str = "", markdown: str = "", mes
             st["docs"][doc_id]["path"] = str(file)
         state.update(work, root)
     return {**pushed, **_present(c, doc_id),
-            "next": "Reply on each Thread you addressed naming this Version, and resolve it (annotary_reply with resolve=true)."}
+            "next": _answer_next(pushed.get("version"))}
+
+
+def _answer_next(version) -> str:
+    v = f"v{version}" if version else "this Version"
+    return (f"Now answer each Thread you acted on with annotary_reply, briefly: what changed in {v} "
+            f"(\"Done in {v}: …\"), or why not. A question gets an answer, an unclear comment a question "
+            "back. resolve=true only on a Thread you fully addressed.")
 
 
 @_with_pending

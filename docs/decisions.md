@@ -58,3 +58,14 @@ is in the Annotary repo, `docs/plans/hermes-edition.md`.
   pin guarantees embed mode.
 - **`member enable` is called, not detected.** Every pinned binary has it; a failure is reported
   in the reconcile and tried again on the next pass, so one profile cannot stop the others.
+
+## 2026-11-08: agents answer the comments they act on
+
+- **The skill, the tool descriptions, the push result and every wake-up say the same rule** as
+  Annotary's own skill (its S39-01): push once, then answer each Thread you acted on, briefly,
+  like a colleague (what changed and in which Version, or why not); a question gets an answer and
+  no edit; an unclear comment gets a question back; resolve only what is fully addressed.
+  Rejected changing the skill alone, because a woken agent acts on the wake-up message and the
+  tool result in front of it more than on a skill it may not reload.
+- **The wake-up's Thread list marks each Thread with no reply from the woken Bot** "(waiting for
+  your answer)", so it knows which ones still need one.

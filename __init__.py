@@ -34,21 +34,27 @@ SCHEMAS = {
             "message": {"type": "string", "description": "A one-line Version message"}},
             "required": []}},
     "annotary_threads": {
-        "description": "Read a Document's review Threads (comments anchored to lines), open ones by default.",
+        "description": ("Read a Document's review Threads (comments anchored to lines) with their replies, open "
+                        "ones by default. Answer each one you act on with annotary_reply."),
         "parameters": {"type": "object", "properties": {
             "doc": _DOC, "open_only": {"type": "boolean", "description": "Only open Threads (default true)"}},
             "required": ["doc"]}},
     "annotary_reply": {
-        "description": "Reply in one review Thread; set resolve=true when your reply settles it.",
+        "description": (
+            "Answer one review Thread, briefly, like a colleague: after a push, what changed and in which "
+            "Version (\"Done in v3: split the intro\") or why not (\"Kept: the spec fixes it\"); the answer "
+            "to a question, with no edit; or a question back when the comment is unclear. resolve=true "
+            "only when the Thread is fully addressed."),
         "parameters": {"type": "object", "properties": {
             "doc": _DOC, "thread": {"type": "string", "description": "Thread id, e.g. t3"},
-            "text": {"type": "string", "description": "Your reply (Markdown); quote the Version you fixed it in"},
+            "text": {"type": "string", "description": "Your reply (Markdown); name the Version a change is in (\"Done in v3: …\")"},
             "resolve": {"type": "boolean"}}, "required": ["doc", "thread", "text"]}},
     "annotary_push_version": {
         "description": (
             "Push a new Version of a Document you edit, after the person sent it back. Refused if you "
             "are not its editor, or while a review is open (the person commented and has not sent it "
-            "back or approved). Give the full new content as path or markdown."),
+            "back or approved). Give the full new content as path or markdown. Push once, then answer "
+            "each Thread you acted on with annotary_reply, naming this Version."),
         "parameters": {"type": "object", "properties": {
             "doc": _DOC, "path": {"type": "string"}, "markdown": {"type": "string"},
             "message": {"type": "string", "description": "What changed, in one line"},

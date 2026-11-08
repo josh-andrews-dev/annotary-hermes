@@ -27,8 +27,9 @@ def head_seq(tok: str) -> int:
     return int(server.api(tok, "GET", "/api/v1/events?wait=0&limit=1").get("seq") or 0)
 
 
-def _thread_digest(tok: str, doc: str, root: Path | None) -> str:
-    """Every open Thread with its replies, as the woken agent's reading list."""
+def _thread_digest(tok: str, doc: str, root: Path | None, me: str = "") -> str:
+    """Every open Thread with its replies, as the woken agent's reading list. A Thread with no
+    reply from *me* is marked: it is waiting for an answer."""
     try:
         rows = docs.read_threads(tok, doc, open_only=True)
     except server.ServerError:
@@ -37,10 +38,19 @@ def _thread_digest(tok: str, doc: str, root: Path | None) -> str:
         return "No open Threads."
     lines = []
     for t in rows[:40]:
-        lines.append(f"- {t['id']} @{t['author']} on {t['where']}: {' '.join(str(t['body'] or '').split())[:600]}")
+        waiting = " (waiting for your answer)" if me and not any(r["author"] == me for r in t["replies"]) else ""
+        lines.append(f"- {t['id']} @{t['author']} on {t['where']}{waiting}: "
+                     f"{' '.join(str(t['body'] or '').split())[:600]}")
         for r in t["replies"][-10:]:
             lines.append(f"    - {r['id']} @{r['author']}: {' '.join(str(r['body'] or '').split())[:600]}")
     return "Open Threads:\n" + "\n".join(lines)
+
+
+#: How to answer a Thread, the same in the skill, the tool descriptions and every wake-up.
+ANSWER = ("answer each Thread you acted on with annotary_reply, briefly, like a colleague: what changed "
+          "and in which Version (\"Done in v3: split the intro\"), or why not (\"Kept: the spec fixes "
+          "it\"). A question gets an answer, no edit. Unclear? Ask in that Thread, don't guess. "
+          "resolve=true only on a Thread you fully addressed")
 
 
 def message_for(w: rules.Wake, *, me: str, digest: str) -> str:
@@ -49,15 +59,15 @@ def message_for(w: rules.Wake, *, me: str, digest: str) -> str:
         label = "Send back" if w.action == "send-back" else "Approve"
         if w.action == "send-back":
             todo = (f"The review is over. Fix what the Threads ask, push one new Version with "
-                    f"annotary_push_version (doc={w.doc}), then reply on each Thread naming that Version "
-                    "and resolve it.")
+                    f"annotary_push_version (doc={w.doc}), then {ANSWER}.")
         else:
-            todo = ("The Document is approved. Do not push. Reply to any open Thread that still needs "
-                    "an answer, then tell the person what happens next.")
+            todo = ("The Document is approved. Do not push. Answer every open Thread that is waiting for "
+                    "you (a question gets an answer, an unclear comment a question back), then tell the "
+                    "person what happens next.")
         return f"[Annotary] @{w.by} chose {label} on {title}.\n{digest}\n{todo}"
     return (f"[Annotary] @{w.by} mentioned you (@{me}) in Thread {w.thread} on {title}: \"{w.excerpt}\"\n"
-            f"Read it with annotary_threads and answer in that Thread with annotary_reply. Do not push a "
-            "new Version: you are answering, not editing.")
+            f"Read it with annotary_threads and answer in that Thread with annotary_reply: the answer, or a "
+            "question back if it is unclear. Do not push a new Version: you are answering, not editing.")
 
 
 class Watcher:
@@ -114,7 +124,7 @@ class Watcher:
                 return self._record(w, "capped", key)
         tok = accounts.token_for(self.profile, self.root) or ""
         me = accounts.handle_of(self.profile, self.root) or self.profile
-        digest = _thread_digest(tok, w.doc, self.root) if w.reason == "review" else ""
+        digest = _thread_digest(tok, w.doc, self.root, me) if w.reason == "review" else ""
         text = message_for(w, me=me, digest=digest)
         ok = False
         try:
