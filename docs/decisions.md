@@ -76,3 +76,13 @@ is in the Annotary repo, `docs/plans/hermes-edition.md`.
   command line (`ps`) with the pinned binary's path when the version matches; rejected recording
   the binary in `server.pid` because a server started before that record existed, or by another
   copy of the plugin, has none, and the record can go stale while the process cannot.
+
+## 2026-11-08: live checks on a free model
+
+- **Live checks run on `meituan/longcat-2.5:free`** (provider `nous`), which does not count
+  against usage limits. Chose it after it passed the full review loop three times (share, Send back
+  with two comments, one push, a reply on each Thread citing v2, both resolved); rejected
+  `stepfun/step-3.7-flash:free` because one tool call took about 4 minutes. The demo recording
+  stays on `deepseek/deepseek-v4.1-flash-1017`. See `docs/testing.md`.
+- **The live loop drives a real interactive session in a pseudo-terminal**; rejected `hermes chat
+  -q` because Hermes refuses to wake a session whose command has exited.
