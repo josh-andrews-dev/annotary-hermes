@@ -8,7 +8,7 @@ import stat
 import pytest
 from conftest import make_profile
 
-from annotary_hermes import accounts, server, state, tools, watcher
+from annotary_hermes import accounts, enablement, server, state, tools, watcher
 
 PLAN = "# Plan\n\nStep one: build the thing.\n\nStep two: test it.\n"
 
@@ -364,3 +364,33 @@ def test_the_wake_digest_marks_threads_waiting_for_an_answer(hermes):
     digest = watcher._thread_digest(server.owner_token(), doc, None, "coder")
     lines = {line.split(" ")[1]: line for line in digest.splitlines() if line.startswith("- t")}
     assert "(waiting for your answer)" in lines["t1"] and "(waiting for your answer)" not in lines["t2"]
+
+
+def test_a_profile_without_annotary_is_reported_once_and_never_made_editor(hermes):
+    from annotary_hermes import docs as docs_mod
+    accounts.reconcile()
+    home = make_profile(hermes, "fresh", annotary=False)  # `hermes profile create` after install
+    report = accounts.reconcile()
+    assert report["fresh"] == "added @fresh; " + enablement.SAY[enablement.OFF]
+    assert accounts.reconcile() == {}  # said once, not on every pass
+    doc = share()["id"]
+    with pytest.raises(tools.ToolError, match="Annotary is off in that profile"):
+        tools.handoff(caller("coder"), doc=doc, to="@fresh")
+    with pytest.raises(ValueError, match="Annotary is off"):
+        docs_mod.set_editor_for_handle(doc, "@fresh")
+    assert enablement.link_plugin("fresh") == "linked"  # what `hermes annotary enable --all` does,
+    (home / "config.yaml").write_text("plugins:\n  enabled:\n    - annotary\n")  # with Hermes's enable
+    assert accounts.reconcile() == {"fresh": "Annotary is on in this profile"}
+    assert tools.handoff(caller("coder"), doc=doc, to="@fresh")["editor"] == "@fresh"
+
+
+def test_a_cloned_profile_with_its_own_copy_is_reported(hermes):
+    accounts.reconcile()
+    home = make_profile(hermes, "bot", annotary=False)  # Desktop's Bot Mode clones default
+    (home / "config.yaml").write_text("plugins:\n  enabled:\n    - annotary\n")
+    copy = home / "plugins" / "annotary"
+    (copy / "annotary_hermes").mkdir(parents=True)
+    (copy / "plugin.yaml").write_text("name: annotary\n")
+    assert accounts.reconcile()["bot"] == "added @bot; " + enablement.SAY[enablement.COPY]
+    assert enablement.link_plugin("bot") == "replaced its own copy with a link"
+    assert accounts.reconcile() == {"bot": "Annotary is on in this profile"}

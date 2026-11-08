@@ -1,6 +1,6 @@
 ---
 name: annotary
-description: Share a Markdown plan or document with the person for line-by-line review in Annotary, read their review Threads, reply, and push a new Version after they send it back. Use when you wrote Markdown the person should read and decide on, or a message names an Annotary Document.
+description: Annotary reviews of your Markdown, reply on every Thread. Share a plan or document with the person for line-by-line review in Annotary, read their review Threads, push a new Version after they send it back, and reply on each Thread you acted on. Use when you wrote Markdown the person should read and decide on, or a message names an Annotary Document.
 ---
 
 # Annotary: reviews of what you write

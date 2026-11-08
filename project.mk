@@ -4,7 +4,7 @@
 
 .PHONY: project-build project-test project-lint project-ci validate live-loop
 
-PYTEST = uvx --python 3.12 --from 'pytest>=8,<9' pytest -q --import-mode=importlib -p no:cacheprovider --rootdir tests
+PYTEST = uvx --python 3.12 --from 'pytest>=8,<9' --with 'pyyaml>=6,<7' --with 'fastapi>=0.110,<1' pytest -q --import-mode=importlib -p no:cacheprovider --rootdir tests
 
 project-build:
 	@echo "nothing to build: the plugin ships as source (project.mk)"

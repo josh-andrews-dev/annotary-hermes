@@ -86,3 +86,23 @@ is in the Annotary repo, `docs/plans/hermes-edition.md`.
   stays on `deepseek/deepseek-v4.1-flash-1017`. See `docs/testing.md`.
 - **The live loop drives a real interactive session in a pseudo-terminal**; rejected `hermes chat
   -q` because Hermes refuses to wake a session whose command has exited.
+
+## 2026-11-08: every profile knows Annotary
+
+- **The plugin reads each profile's plugin state from its files**, not `hermes -p X plugins list`:
+  the gateway's reconcile runs every 5 minutes, and the old line match counted any plugin whose
+  name contains "annotary".
+- **The plugin never enables itself in a profile.** Chose to report it (members, doctor,
+  reconcile) and to point at `hermes annotary enable --all`; rejected enabling from the reconcile
+  because a third-party plugin starts off per profile and turning it on is the person's choice.
+- **`enable --all` replaces a cloned copy of the plugin with a link**; rejected leaving it because
+  a clone of default (Desktop's Bot Mode) would run that day's plugin code forever.
+- **A profile where the person turned the plugin off is its own state (`DECLINED`)**, read from
+  `plugins.disabled` or a plugin folder that isn't enabled. Chose to leave it off in `enable --all`
+  and to raise no complaint; rejected treating it like a profile never set up, because that turned
+  it back on unasked. `hermes annotary enable PROFILE` is the way back in. So a link is taken back
+  when `hermes plugins enable` fails, or the half-done profile would read as declined.
+- **A Document is never handed to a Bot whose profile has Annotary off**: it could not edit, and
+  no watcher runs there to wake it.
+- **The skill is registered with its description**, because Hermes lists a plugin skill in the
+  system prompt with the description passed to `register_skill` and reads none from the file.
