@@ -16,7 +16,7 @@ import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import accounts, docs, paths, rules, server, state
+from . import accounts, docs, enablement, paths, rules, server, state
 
 CARD = '::annotary{{doc="{doc}"}}'
 DOC_RE = re.compile(r"^[A-Za-z0-9._/~ -]{1,200}$")
@@ -357,6 +357,9 @@ def handoff(c: Caller, *, doc: str, to: str, root: Path | None = None) -> dict:
     pid = active.get(target) or (target if target in active.values() else None)
     if not pid:
         raise ToolError(f"@{target} is not an active Bot of this Hermes install")
+    if not enablement.has_annotary(enablement.plugin_state(pid, root)):
+        raise ToolError(f"@{target} has no Annotary tools: Annotary is off in that profile, so it could "
+                        f"not edit. The person can turn it on with `{enablement.turn_on(pid)}`.")
     entry = docs.info(doc_id, root) or {}
     if entry.get("editor") and entry["editor"] != c.profile:
         raise ToolError(f"only the editor (@{accounts.handle_of(entry['editor'], root)}) can hand off this Document")

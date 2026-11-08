@@ -13,7 +13,7 @@ import logging
 import sys
 from pathlib import Path
 
-from .annotary_hermes import paths, tools
+from .annotary_hermes import paths, skillmeta, tools
 from .annotary_hermes import cli as annotary_cli
 
 log = logging.getLogger("annotary_hermes")
@@ -156,7 +156,8 @@ def register(ctx):
 
     skill = Path(__file__).resolve().parent / "skills" / "annotary" / "SKILL.md"
     if skill.is_file():
-        ctx.register_skill("annotary", skill)
+        meta = skillmeta.frontmatter(skill)
+        ctx.register_skill("annotary", skill, description=str(meta.get("description") or ""), frontmatter=meta)
 
     ctx.register_cli_command(name="annotary", help="Annotary: the private review server, Members and wake-ups",
                              setup_fn=annotary_cli.setup_argparse, handler_fn=annotary_cli.main)

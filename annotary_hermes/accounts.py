@@ -14,7 +14,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import paths, server, state
+from . import enablement, paths, server, state
 
 RECONCILE_EVERY = 60  # seconds, at most, from tool and backend calls
 GATEWAY_RECONCILE_EVERY = 300
@@ -220,6 +220,14 @@ def reconcile(root: Path | None = None) -> dict:
             if not token_for(pid, root):
                 _write_token(pid, _mint(owner_tok, entry["handle"], root), root)
                 note(pid, f"@{entry['handle']} new Token")
+        for pid in profiles:
+            entry = mapped.get(pid)
+            if not entry or entry.get("disabled"):
+                continue
+            plugin = enablement.plugin_state(pid, root)
+            if plugin != entry.get("plugin", enablement.ON) and plugin != enablement.DECLINED:
+                note(pid, enablement.SAY.get(plugin, "Annotary is on in this profile"))
+            entry["plugin"] = plugin
         st["reconciled_at"] = time.time()
 
     state.update(work, root)

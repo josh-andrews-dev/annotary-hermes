@@ -31,7 +31,7 @@ _PLUGIN = Path(__file__).resolve().parents[1]
 if str(_PLUGIN) not in sys.path:
     sys.path.insert(0, str(_PLUGIN))
 
-from annotary_hermes import accounts, bridge, paths, server, state  # noqa: E402
+from annotary_hermes import accounts, bridge, enablement, paths, server, state  # noqa: E402
 
 router = APIRouter()
 DOC_ID = re.compile(r"^[a-z0-9]{1,16}$")
@@ -94,7 +94,8 @@ def _status() -> dict:
     st = state.load()
     return {"ok": True, "server": server.health(), "embed": bridge.shell() is not None, "wake": _wake_on(),
             "owner": "@" + server.owner_handle(),
-            "bots": sorted("@" + m["handle"] for m in st["members"].values() if not m.get("disabled"))}
+            "bots": sorted("@" + m["handle"] for pid, m in st["members"].items() if not m.get("disabled")
+                           and enablement.has_annotary(enablement.plugin_state(pid)))}
 
 
 @router.get("/status")

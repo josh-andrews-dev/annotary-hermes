@@ -2,9 +2,9 @@
 # upgrade never changes it. The Makefile's `make <name>` runs `project-<name>` here.
 # A placeholder that passes says so; a placeholder for something that ships fails.
 
-.PHONY: project-build project-test project-lint project-ci validate
+.PHONY: project-build project-test project-lint project-ci validate live-loop
 
-PYTEST = uvx --python 3.12 --from 'pytest>=8,<9' pytest -q --import-mode=importlib -p no:cacheprovider --rootdir tests
+PYTEST = uvx --python 3.12 --from 'pytest>=8,<9' --with 'pyyaml>=6,<7' --with 'fastapi>=0.110,<1' pytest -q --import-mode=importlib -p no:cacheprovider --rootdir tests
 
 project-build:
 	@echo "nothing to build: the plugin ships as source (project.mk)"
@@ -22,6 +22,10 @@ project-lint:
 
 validate: ## Run Hermes's plugin validator on the package (needs Hermes)
 	@python3 scripts/project/validate_package.py
+
+PROFILE ?= coder
+live-loop: ## One live share, Send back, push, reply, resolve loop on a real Hermes (PROFILE=, MODEL=)
+	@python3 scripts/project/live_loop.py --profile $(PROFILE) $(if $(MODEL),--model $(MODEL))
 
 # What CI runs besides the standard lint.
 project-ci: project-lint project-test

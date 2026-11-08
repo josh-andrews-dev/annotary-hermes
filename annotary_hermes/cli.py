@@ -1,15 +1,13 @@
-"""``hermes annotary …``: setup, status, members, enable --all, wake on|off, doctor, stop, logs."""
+"""``hermes annotary …``: setup, status, members, enable, wake on|off, doctor, stop, logs."""
 
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import subprocess
 import sys
-from pathlib import Path
 
-from . import accounts, desktop, install, paths, server, state
+from . import accounts, desktop, enablement, install, paths, server, state
 
 
 def _hermes() -> list[str]:
@@ -58,10 +56,20 @@ def members(_args=None) -> int:
     print(f"{'PROFILE':<16} {'HANDLE':<20} {'NAME':<24} STATE")
     owner = server.owner_handle()
     print(f"{'(you)':<16} @{owner:<19} {'':<24} owner")
+    off = []
     for pid, m in sorted(st["members"].items()):
         flag = "disabled" if m.get("disabled") else "active"
         tok = "token ok" if accounts.token_for(pid) else "no token"
-        print(f"{pid:<16} @{m['handle']:<19} {m.get('name', ''):<24} {flag}, {tok}")
+        plugin = "" if m.get("disabled") else ", " + {
+            enablement.ON: "Annotary on", enablement.OFF: "Annotary OFF",
+            enablement.COPY: "Annotary on (own copy)",
+            enablement.DECLINED: "Annotary off (your choice)"}[enablement.plugin_state(pid)]
+        if plugin.endswith(("OFF", "copy)")):
+            off.append(pid)
+        print(f"{pid:<16} @{m['handle']:<19} {m.get('name', ''):<24} {flag}, {tok}{plugin}")
+    if off:
+        print(f"\n{', '.join(off)}: run `{enablement.FIX}` so every profile has the Annotary tools and "
+              "skill (a profile made after install has none, and a cloned one runs its own copy).")
     return 0
 
 
@@ -69,28 +77,57 @@ def _profile_ids() -> list[str]:
     return [p.id for p in accounts.list_profiles()]
 
 
-def enable_all(_args=None) -> int:
-    """D6: make the plugin available and enabled in every profile, then set up."""
-    root = paths.hermes_root()
-    src = paths.package_dir()
-    root_link = root / "plugins" / paths.PLUGIN_ID
-    failures = 0
-    for pid in _profile_ids():
-        home = paths.profile_home(pid, root)
-        here = home / "plugins" / paths.PLUGIN_ID
-        if pid != "default" or not here.exists():
-            if not here.exists() and not here.is_symlink():
-                here.parent.mkdir(parents=True, exist_ok=True)
-                target = root_link.resolve() if root_link.exists() else src
-                here.symlink_to(target, target_is_directory=True)
-                print(f"{pid}: linked {here} -> {target}")
+def _turn_on(pid: str) -> bool:
+    """Link the plugin into *pid* and enable it. A profile cloned from default has its own copy
+    of the plugin; it is replaced by a link, so updates reach it."""
+    new = enablement.plugin_state(pid) == enablement.OFF
+    linked = enablement.link_plugin(pid)
+    if linked != "linked":
+        print(f"{pid}: {linked}")
+    ok = False
+    try:
         r = _run_hermes(["-p", pid, "plugins", "enable", paths.PLUGIN_ID])
         ok = r.returncode == 0
-        failures += 0 if ok else 1
         print(f"{pid}: {'enabled' if ok else 'enable failed: ' + (r.stderr or r.stdout).strip()[-200:]}")
+    finally:
+        if new and linked == "linked" and not ok:
+            enablement.unlink_plugin(pid)
+    return ok
+
+
+def _finish_enable() -> None:
     setup()
     print("Restart the gateway to load the tools in every profile: hermes gateway restart --detach")
+
+
+def enable_all(_args=None) -> int:
+    """D6: Annotary on in every profile, except one where the person turned it off."""
+    failures = 0
+    for pid in _profile_ids():
+        if enablement.plugin_state(pid) == enablement.DECLINED:
+            print(f"{pid}: left off, as you chose (to turn it on: {enablement.turn_on(pid)})")
+        elif not _turn_on(pid):
+            failures += 1
+    _finish_enable()
+    print("A profile you make later has no Annotary until you run `hermes annotary enable --all` again.")
     return 1 if failures else 0
+
+
+def enable(args) -> int:
+    """`enable --all`, or `enable PROFILE`: the one way to opt a declined profile back in."""
+    profile, every = getattr(args, "profile", None), getattr(args, "all", False)
+    if bool(profile) == bool(every):
+        print("usage: hermes annotary enable --all | hermes annotary enable PROFILE", file=sys.stderr)
+        return 1
+    if every:
+        return enable_all()
+    known = _profile_ids()
+    if profile not in known:
+        print(f"error: no profile named {profile} (profiles: {', '.join(known)})", file=sys.stderr)
+        return 1
+    ok = _turn_on(profile)
+    _finish_enable()
+    return 0 if ok else 1
 
 
 def wake_state() -> dict:
@@ -144,9 +181,13 @@ def doctor(_args=None) -> int:
     except Exception as e:  # noqa: BLE001
         check(False, f"members: {e}")
     for pid in _profile_ids():
-        r = _run_hermes(["-p", pid, "plugins", "list"])
-        enabled = any(paths.PLUGIN_ID in line and "enabled" in line for line in r.stdout.splitlines())
-        check(enabled, f"tools enabled in profile {pid}", "hermes annotary enable --all")
+        plugin = enablement.plugin_state(pid)
+        what = {enablement.ON: f"Annotary tools and skill on in profile {pid}",
+                enablement.OFF: f"Annotary is off in profile {pid}: its agent has no Annotary tools or skill",
+                enablement.COPY: f"profile {pid} runs its own copy of the plugin (cloned), which updates never reach",
+                enablement.DECLINED: f"Annotary is off in profile {pid}, as you chose (to turn it on: "
+                                     f"{enablement.turn_on(pid)})"}
+        check(plugin in (enablement.ON, enablement.DECLINED), what[plugin], enablement.FIX)
     w = _run_hermes(["webapp", "--status"])
     print("Webapp:\n  " + "\n  ".join((w.stdout or w.stderr).strip().splitlines()[:8]))
     print("  Where Web Access cannot be switched on (a VPS, Docker, Hermes Cloud), set in config.yaml:\n"
@@ -174,8 +215,9 @@ def setup_argparse(parser) -> None:
     subs.add_parser("setup", help="Install the server, the desktop page and the Members")
     subs.add_parser("status", help="Server, page, Members and recent wake-ups")
     subs.add_parser("members", help="Which Member each profile is")
-    en = subs.add_parser("enable", help="Turn the tools on in profiles")
-    en.add_argument("--all", action="store_true", required=True, help="Every profile")
+    en = subs.add_parser("enable", help="Turn the tools on in one profile, or in every profile you have not turned off")
+    en.add_argument("profile", nargs="?", help="One profile, including one where you turned Annotary off")
+    en.add_argument("--all", action="store_true", help="Every profile, except any where you turned Annotary off")
     wk = subs.add_parser("wake", help="Let comments wake the chat that shared a Document")
     wk.add_argument("state", choices=["on", "off"])
     subs.add_parser("doctor", help="Check and repair the install; Webapp settings")
@@ -185,14 +227,14 @@ def setup_argparse(parser) -> None:
     parser.set_defaults(func=main)
 
 
-COMMANDS = {"setup": setup, "status": status, "members": members, "enable": enable_all, "wake": wake,
+COMMANDS = {"setup": setup, "status": status, "members": members, "enable": enable, "wake": wake,
             "doctor": doctor, "stop": stop, "logs": logs}
 
 
 def main(args) -> int:
     cmd = getattr(args, "annotary_command", None)
     if cmd not in COMMANDS:
-        print("usage: hermes annotary {setup|status|members|enable --all|wake on|off|doctor|stop|logs}")
+        print("usage: hermes annotary {setup|status|members|enable --all|enable PROFILE|wake on|off|doctor|stop|logs}")
         return 1
     try:
         return COMMANDS[cmd](args) or 0
