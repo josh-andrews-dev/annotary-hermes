@@ -1,0 +1,7 @@
+{
+  "name": "annotary",
+  "label": "Annotary",
+  "description": "Backend for the Annotary page: the Document list and view, comments, Send back and Approve, through the private Annotary server.",
+  "api": "plugin_api.py",
+  "tab": {"hidden": true}
+}

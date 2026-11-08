@@ -1,0 +1,31 @@
+manifest_version: 2
+name: annotary
+label: Annotary
+version: 0.0.0
+description: >
+  Review your agents' plans and documents with comments, from Desktop, the
+  Webapp and your phone. Runs a private Annotary server on this machine
+  (loopback only), gives every profile its own Annotary account and native
+  tools, and wakes the agent when you send a Document back or approve it.
+author: Josh Andrews
+license: Apache-2.0
+homepage: https://github.com/josh-andrews-dev/annotary-hermes
+tags: [review, documents, desktop, webapp]
+requires_hermes: ">=0.23.0"
+provides_tools:
+  - annotary_share
+  - annotary_threads
+  - annotary_reply
+  - annotary_push_version
+  - annotary_handoff
+  - annotary_act
+  - annotary_list
+config_schema:
+  notify_when_off:
+    type: bool
+    default: true
+    label: "Notify me when a review needs the agent"
+    description: >
+      While wake-ups are off (run `hermes annotary wake on` to let Send back,
+      Approve and @mentions wake the chat that shared a Document), show a
+      notification instead.

@@ -2,16 +2,26 @@
 # upgrade never changes it. The Makefile's `make <name>` runs `project-<name>` here.
 # A placeholder that passes says so; a placeholder for something that ships fails.
 
-.PHONY: project-build project-test project-lint project-ci
+.PHONY: project-build project-test project-lint project-ci validate
+
+PYTEST = uvx --python 3.12 --from 'pytest>=8,<9' pytest -q --import-mode=importlib -p no:cacheprovider --rootdir tests
 
 project-build:
-	@echo "nothing to build yet (project.mk)"
+	@echo "nothing to build: the plugin ships as source (project.mk)"
 
+# Unit tests and live tests against a real `annotary serve` (the pinned release binary, downloaded
+# once and checked against its pinned SHA-256; ANNOTARY_HERMES_DEV_BINARY overrides it).
 project-test:
-	@echo "no tests yet (project.mk)"
+	$(PYTEST) tests
+	node --import ./tests/desktop/register.mjs --test tests/desktop/*.test.mjs
 
 project-lint:
-	@echo "no project lint yet (project.mk)"
+	@uv run --python 3.12 --no-project python -m compileall -q __init__.py annotary_hermes dashboard scripts/project tests
+	@python3 scripts/project/check_desktop_page.py
+	@python3 scripts/project/validate_package.py
 
-# What CI runs besides the standard lint. 
+validate: ## Run Hermes's plugin validator on the package (needs Hermes)
+	@python3 scripts/project/validate_package.py
+
+# What CI runs besides the standard lint.
 project-ci: project-lint project-test

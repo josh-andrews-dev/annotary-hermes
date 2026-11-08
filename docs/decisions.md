@@ -1,0 +1,60 @@
+# Decisions
+
+Dated choices for annotary-hermes, as "chose X; rejected Y because Z". The design itself (D1–D11)
+is in the Annotary repo, `docs/plans/hermes-edition.md`.
+
+## 2026-11-07: the first version (the basic loop)
+
+- **The desktop page is a standalone desktop plugin.** Chose to ship it as `desktop-page/plugin.js`
+  and copy it, with no `.hermes-package.json` marker, to `$HERMES_ROOT/desktop-plugins/annotary/`
+  from the plugin's setup step; rejected a package `desktop/` half because Hermes 0.23 loads a
+  package half switched off in each new browser and Safari's Capabilities page cannot switch it
+  on, and because Hermes's half-copier (Electron's and the Webapp's) adopts a marker-less copy
+  whose `plugin.js` is byte-equal to a package half by writing a marker into it.
+- **One watcher thread per profile, in the gateway only.** Chose per-profile watchers that act
+  only on their own profile's wake-ups; rejected one shared watcher because
+  `ctx.inject_message` reaches only the calling plugin's own profile. One of them (an flock)
+  broadcasts live updates and runs the 5-minute reconcile. `register()` starts nothing outside
+  `hermes gateway run`, since it runs in every `hermes` command.
+- **Shared state on disk, under one flock.** Chose `$HERMES_ROOT/annotary/state.json`; rejected
+  module globals because each profile imports its own copy of the plugin module and the backend
+  runs in other processes.
+- **The watcher reads events with the owner Token.** Chose the owner's view and the plugin's own
+  classification (mentions as handles, author handle); rejected each agent's `mention` kind
+  because Send back and Approve must reach the editor whether or not it is mentioned.
+- **Tools call the CLI; the watcher, reconcile and backend call the HTTP API.** The CLI keeps
+  Assets and Sidecars exactly as in Annotary; the API is cheaper for reads and long-polls. Either
+  way the Token travels in the environment or a header, never on a command line.
+- **The bridge refuses answers over 1 MB** (750 KB of binary, which grows by a third as base64)
+  with 413, because the spike measured that a message over about 1 MB stalls the gateway. The
+  frame then shows the Asset's "Open" button. Annotary's embed image limit was 2 MiB; at our
+  request it is now 700 KiB, under the cap.
+- **A returning profile gets its own Member back.** Annotary never reuses a handle, so a profile
+  made again under a deleted one's name is matched to its disabled Member by profile id. Chose
+  `annotary member enable` plus a newly minted Token (enabling keeps the old Tokens revoked);
+  rejected minting `@name-2` because the Bot would lose its handle and its history.
+
+## 2026-11-07: review round 1
+
+- **A new pin replaces a running server's binary.** Chose to check the binary on ensure-running's
+  fast path and, under the ensure lock, install the pinned binary and restart a server running
+  anything else; rejected installing only when the server is down because a running server would
+  then keep an old binary forever. The dev override skips the version check.
+- **Each markdown share gets its own folder** (`shares/<doc id>/`); rejected one shared folder
+  because the Sidecar `annotary push` leaves there bound a later share with the same name to the
+  earlier Document. Sharing a file whose Sidecar already binds a Document is a new Version of it,
+  under the editor and review rules.
+- **A review restarts at the latest push, Send back or Approve**, and is open while a person's
+  comment follows it; rejected "any Action ends the review" because a comment after Approve was
+  then ignored.
+- **Re-enabling a Member is detected, not assumed**: from `annotary member --help` (superseded by the v0.4.1 pin below).
+
+## 2026-11-07: Annotary v0.4.1
+
+- **Pinned Annotary v0.4.1** (embed mode, ordered Members, `serve --setup-only --json`,
+  `member enable`); v0.4.0 has no release. Chose to read only the setup command's JSON; rejected
+  keeping the `ANNOTARY_TOKEN=` fallback because only v0.3.4 printed that form. Chose to make the
+  embed tests required (they fail, not skip, when the pinned server has no shell) because the
+  pin guarantees embed mode.
+- **`member enable` is called, not detected.** Every pinned binary has it; a failure is reported
+  in the reconcile and tried again on the next pass, so one profile cannot stop the others.

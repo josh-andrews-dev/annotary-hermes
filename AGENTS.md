@@ -7,29 +7,30 @@ Annotary for Hermes Agent: review your agents' plans and documents with comments
 
 Also follow `.agents/rules/standard.md`, the standard rules for this repo.
 
-Tracker: Notion while the repo is private (the repo's tracker is created with its first item, per
-the `tracker` skill); this repo's GitHub Issues once it goes public.
+Tracker: Notion while the repo is private (created with its first item, per the `tracker` skill),
+then this repo's GitHub Issues.
 
 ## Project rules
 
 The plugin gives Hermes Agent a private Annotary: a loopback `annotary serve` per Hermes install,
-an Annotary Member per Hermes profile, native agent tools, and an Annotary page in Hermes Desktop
-and the Webapp. The design and its decisions (D1–D11) are in the Annotary repo's
-`docs/plans/hermes-edition.md`, not yet on `main`: it is pull request #30 there, branch
-`t3/hermes-edition-addon-plan`. Read it before changing behavior.
+an Annotary Member per profile, native tools, and an Annotary page in Desktop and the Webapp. Read
+the design (D1–D11), the Annotary repo's `docs/plans/hermes-edition.md` (its PR #30, not yet on
+`main`), before changing behavior.
 
 - Hermes plugin catalog rules bind every change (`plugin-catalog/README.md` in
   NousResearch/hermes-agent): no bundled binaries, no self-updating code, no core overrides,
   credentials only through Hermes, respect approvals, disclose risky behavior in the README.
-- The `annotary` binary is downloaded at setup from Annotary's GitHub Release, pinned by version
-  and SHA-256 in the source; a new pin is a reviewed change, never fetched at run time.
-- Never touch `~/.annotary` or another Annotary install: the private server lives under
-  `$HERMES_HOME`, on loopback only, behind Hermes's own sign-in.
-- Tools call the bundled CLI with argv only (no shell), with `ANNOTARY_TOKEN` and
-  `ANNOTARY_SERVER` in the environment; never a Token on a command line or in a log.
-- Agent wake-ups follow Annotary's review rule (D5): never on a plain Comment; the Document's
-  editor wakes on Send back or Approve, a named Bot on an @mention, and a push is refused while a
+- The `annotary` binary comes from Annotary's GitHub Release, pinned by version and SHA-256 in
+  the source; a new pin is a reviewed change, never fetched at run time.
+- Never touch `~/.annotary` or another Annotary install; the private server lives under
+  `$HERMES_HOME`, on loopback.
+- Tools call the CLI with argv only, `ANNOTARY_TOKEN` and `ANNOTARY_SERVER` in the environment;
+  never a Token on a command line or in a log.
+- Agent wake-ups follow Annotary's review rule (D5): never on a plain Comment; the editor
+  wakes on Send back or Approve, a named Bot on an @mention, and a push is refused while a
   review is open. One editor per Document (D11).
-- `desktop/plugin.js` is plain ESM that imports only `@hermes/plugin-sdk`, `react` and
-  `react/jsx-runtime`; no build step.
-- The repo will be public: no host names, email addresses or home paths in code, tests or docs.
+- The desktop page is `desktop-page/plugin.js`, copied with no package marker to
+  `$HERMES_ROOT/desktop-plugins/annotary/` so it loads switched on (Safari cannot switch a package
+  half on). Never add a `desktop/` half: Hermes would adopt that folder and mark it. Plain ESM
+  importing only `@hermes/plugin-sdk`, `react`, `react/jsx-runtime`; no build step.
+- The repo will be public: no host names, email addresses or home paths anywhere in it.
