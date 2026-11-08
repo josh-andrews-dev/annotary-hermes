@@ -76,3 +76,19 @@ is in the Annotary repo, `docs/plans/hermes-edition.md`.
   command line (`ps`) with the pinned binary's path when the version matches; rejected recording
   the binary in `server.pid` because a server started before that record existed, or by another
   copy of the plugin, has none, and the record can go stale while the process cannot.
+
+## 2026-11-08: Bots review each other
+
+- **`annotary_comment` takes a quote, not a position.** The tool finds the passage in the head
+  Version and posts its `L:C-L:C` range with `--version`. A quote that is missing or matches more
+  than once is refused with what to do; rejected picking the first match, because a comment on the
+  wrong line reads as a real one.
+- **`annotary_read` was added with it.** A reviewer has to see a Document it did not write, and a
+  profile may have no terminal. Rejected adding the text to `annotary_threads`, which every woken
+  agent calls and would pay for each time.
+- **A Bot's Send back or Approve wakes the editor** (never the editor's own). Rejected keeping it
+  to people, because a Bot's Send back then did nothing at all. It counts against the cap of 3
+  wake-ups between Bots per Document per hour.
+- **A Bot's Action does not end a person's review.** Its Send back still wakes the editor, but
+  while a person has commented and not decided, the editor's push stays refused. Rejected letting a
+  Bot end it, because that would let an agent overrule someone who is still reading.

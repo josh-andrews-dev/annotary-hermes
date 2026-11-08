@@ -30,7 +30,7 @@ def test_no_editor_no_wake_and_other_actions_ignored():
 
 
 def test_an_agents_own_action_wakes_nobody():
-    assert rules.decide(ev("action.taken", "bencha", action="approve"), managed=MANAGED, editor="coder") == []
+    assert rules.decide(ev("action.taken", "coder", action="approve"), managed=MANAGED, editor="coder") == []
 
 
 def test_mention_wakes_only_the_named_bot():
