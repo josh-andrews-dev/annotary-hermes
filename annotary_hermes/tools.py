@@ -177,7 +177,8 @@ def share(c: Caller, *, path: str = "", markdown: str = "", name: str = "", mess
             # The file already belongs to a Document: this is a new Version of it, under the same
             # rules as annotary_push_version (editor only, never mid-review), and its editor stays.
             out = push_version.__wrapped__(c, doc=bound, path=str(file), message=message, root=root)
-            out["note"] = f"{file.name} is already the Document {bound}: this pushed a new Version of it."
+            if not out.get("refused"):
+                out["note"] = f"{file.name} is already the Document {bound}: this pushed a new Version of it."
             return out
     try:
         pushed = _cli_json(tok, ["push", file.name, "-m", message or "shared from Hermes"], root, cwd=file.parent)

@@ -175,7 +175,19 @@ def _current(h: dict | None, root: Path | None) -> bool:
         return False
     if not install.installed(root)["ok"]:
         return False
-    return bool(install.dev_binary()) or h.get("version") == install.VERSION.lstrip("v")
+    if install.dev_binary():
+        return True
+    return h.get("version") == install.VERSION.lstrip("v") and _runs_pinned_binary(root)
+
+
+def _runs_pinned_binary(root: Path | None) -> bool:
+    """Whether our server process was started from the pinned binary: a dev build can report the
+    pinned version. Read from the process itself, so it holds whoever started it."""
+    pid = server_pid(root)
+    out = _command(pid) if pid else ""
+    if not _serves_our_data(out, root):
+        return True  # no process of ours to compare; the version already matched
+    return out.startswith(f"{install.bin_path(root)} serve ")
 
 
 def ensure_running(root: Path | None = None) -> dict:
@@ -230,14 +242,22 @@ def server_pid(root: Path | None = None) -> int | None:
     return pid or None
 
 
-def _is_our_server(pid: int, root: Path | None = None) -> bool:
+def _command(pid: int) -> str:
     try:
-        out = subprocess.run(["ps", "-p", str(pid), "-o", "command="], capture_output=True, text=True,
-                             timeout=5).stdout
+        return subprocess.run(["ps", "-p", str(pid), "-o", "command="], capture_output=True, text=True,
+                              timeout=5).stdout.strip()
     except (OSError, subprocess.SubprocessError):
-        return False
+        return ""
+
+
+def _serves_our_data(command: str, root: Path | None) -> bool:
     # Ours when it serves our data dir, whichever binary runs it (the pinned one or a dev build).
-    return "annotary" in out and " serve " in f" {out} " and f"--data-dir {paths.data_dir(root)} " in f"{out} "
+    return ("annotary" in command and " serve " in f" {command} "
+            and f"--data-dir {paths.data_dir(root)} " in f"{command} ")
+
+
+def _is_our_server(pid: int, root: Path | None = None) -> bool:
+    return _serves_our_data(_command(pid), root)
 
 
 def stop(root: Path | None = None) -> dict:

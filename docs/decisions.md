@@ -69,3 +69,10 @@ is in the Annotary repo, `docs/plans/hermes-edition.md`.
   tool result in front of it more than on a skill it may not reload.
 - **The wake-up's Thread list marks each Thread with no reply from the woken Bot** "(waiting for
   your answer)", so it knows which ones still need one.
+
+## 2026-11-08: review round 2 follow-ups
+
+- **The running binary is read from the server process.** Chose to compare the server's own
+  command line (`ps`) with the pinned binary's path when the version matches; rejected recording
+  the binary in `server.pid` because a server started before that record existed, or by another
+  copy of the plugin, has none, and the record can go stale while the process cannot.

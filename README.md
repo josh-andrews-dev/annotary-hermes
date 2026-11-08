@@ -106,9 +106,11 @@ Hermes process needs it: the gateway does not inherit your shell, so put it in H
 while you test, and restart the gateway after taking it out, since a running gateway keeps it and
 starts the server on that build again), `ANNOTARY_HERMES_PORT` moves the server, and `ANNOTARY_HERMES_DOWNLOAD_CACHE`
 keeps checked release tarballs between runs; all three are for development only. Without the
-first, a server found running any binary but the pinned one is stopped and restarted on the
-pinned one (after a plugin upgrade that moves the pin). `make validate` runs
-Hermes's plugin validator where Hermes is installed.
+first, a server found running any binary but the pinned one, read from the server process itself
+so a dev build that reports the pinned version counts too, is stopped and restarted on the pinned
+one on the next call (also after a plugin upgrade that moves the pin). To switch at once after
+taking the override out, run `hermes annotary stop`. `make validate` runs Hermes's plugin
+validator where Hermes is installed.
 
 ## Contributing
 

@@ -135,9 +135,10 @@ def test_only_the_editor_pushes_and_never_mid_review(hermes):
     doc = share()["id"]
     refused = tools.push_version(caller("bencha"), doc=doc, markdown=PLAN + "\nbencha\n")
     assert refused["refused"] and "@coder edits this Document" in refused["reason"]
+    assert "note" not in refused  # nothing was pushed, so nothing may say it was
     owner_cli("thread", "new", doc, "--document", "-m", "-", stdin="Why step one?")
     mid = tools.push_version(caller("coder"), doc=doc, markdown=PLAN + "\nv2\n")
-    assert mid["refused"] and "review is open" in mid["reason"]
+    assert mid["refused"] and "review is open" in mid["reason"] and "note" not in mid
     owner_cli("act", doc, "send-back")
     ok = tools.push_version(caller("coder"), doc=doc, markdown=PLAN + "\nv2\n", message="fix")
     assert ok["version"] == 2
@@ -272,13 +273,15 @@ def test_sharing_a_bound_file_follows_the_editor_and_review_rules(hermes, tmp_pa
     (tmp_path / "plan.md").write_text(PLAN + "\nbencha's edit\n")
     refused = tools.share(caller("bencha", cwd=str(tmp_path)), path="plan.md")
     assert refused["refused"] and "@coder edits this Document" in refused["reason"]
+    assert "note" not in refused  # nothing was pushed, so nothing may say it was
     assert state.load()["docs"][doc]["editor"] == "coder"
     owner_cli("thread", "new", doc, "--document", "-m", "-", stdin="Wait for me.")
     mid = tools.share(caller("coder", cwd=str(tmp_path)), path="plan.md")
-    assert mid["refused"] and "review is open" in mid["reason"]
+    assert mid["refused"] and "review is open" in mid["reason"] and "note" not in mid
     owner_cli("act", doc, "send-back")
     ok = tools.share(caller("coder", cwd=str(tmp_path)), path="plan.md")
     assert ok["id"] == doc and ok["version"] == 2
+    assert ok["note"] == f"plan.md is already the Document {doc}: this pushed a new Version of it."
 
 
 def test_missed_wakeups_ride_on_every_tool(hermes):
@@ -313,6 +316,27 @@ def test_a_running_server_on_a_stale_binary_gets_the_pinned_one(hermes, monkeypa
     out = server.ensure_running()
     assert out["outcome"] == "started" and install.installed()["ok"]
     assert out["health"]["version"] == install.VERSION.lstrip("v")
+
+
+def running_command() -> str:
+    import subprocess
+    return subprocess.run(["ps", "-p", str(server.server_pid()), "-o", "command="], capture_output=True,
+                          text=True).stdout.strip()
+
+
+def test_a_dev_build_that_reports_the_pinned_version_is_replaced(hermes, monkeypatch, tmp_path):
+    from annotary_hermes import install
+    dev = tmp_path / "dev" / "annotary"
+    dev.parent.mkdir()
+    shutil.copy2(install.bin_path(), dev)  # same version string, a different binary
+    server.stop()
+    monkeypatch.setenv(install.DEV_BINARY_ENV, str(dev))
+    assert server.ensure_running()["outcome"] == "started"
+    assert running_command().startswith(f"{dev} serve ")
+    monkeypatch.delenv(install.DEV_BINARY_ENV)  # the override is taken out
+    out = server.ensure_running()
+    assert out["outcome"] == "started" and out["health"]["version"] == install.VERSION.lstrip("v")
+    assert running_command().startswith(f"{install.bin_path()} serve ")
 
 
 def test_a_current_server_is_left_alone(hermes):
