@@ -7,14 +7,16 @@ Annotary for Hermes Agent: review your agents' plans and documents with comments
 
 Also follow `.agents/rules/standard.md`, the standard rules for this repo.
 
-Tracker: this repo's GitHub Issues.
+Tracker: Notion while the repo is private (the repo's tracker is created with its first item, per
+the `tracker` skill); this repo's GitHub Issues once it goes public.
 
 ## Project rules
 
 The plugin gives Hermes Agent a private Annotary: a loopback `annotary serve` per Hermes install,
 an Annotary Member per Hermes profile, native agent tools, and an Annotary page in Hermes Desktop
-and the Webapp. The design and its decisions (D1–D11) are in the Annotary repo,
-`docs/plans/hermes-edition.md`; read it before changing behavior.
+and the Webapp. The design and its decisions (D1–D11) are in the Annotary repo's
+`docs/plans/hermes-edition.md`, not yet on `main`: it is pull request #30 there, branch
+`t3/hermes-edition-addon-plan`. Read it before changing behavior.
 
 - Hermes plugin catalog rules bind every change (`plugin-catalog/README.md` in
   NousResearch/hermes-agent): no bundled binaries, no self-updating code, no core overrides,
