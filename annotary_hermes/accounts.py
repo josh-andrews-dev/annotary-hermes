@@ -30,6 +30,15 @@ class Profile:
     previous_names: list[str] = field(default_factory=list)
 
 
+def own_file(path: Path, home: Path) -> bool:
+    """*path* is a regular file, not a link, that really lives under *home*: a link could point
+    anywhere, and what is read from a profile may be uploaded."""
+    try:
+        return path.is_file() and not path.is_symlink() and path.resolve().is_relative_to(home.resolve())
+    except (OSError, RuntimeError):  # RuntimeError: a symlink loop
+        return False
+
+
 def _yaml_scalar(v: str):
     return {"true": True, "false": False, "null": None}.get(v.lower(), v)
 
@@ -37,9 +46,11 @@ def _yaml_scalar(v: str):
 def _read_profile_yaml(path: Path) -> dict:
     """``profile.yaml`` as a dict. PyYAML when Hermes has it; else a reader for the few keys used
     here (top-level strings, a list of strings, the scalars under ``ui_meta: hermes-bots``)."""
+    if not own_file(path, path.parent):
+        return {}
     try:
         text = path.read_text(encoding="utf-8-sig")
-    except OSError:
+    except (OSError, UnicodeDecodeError):  # one unreadable profile must not stop the others
         return {}
     try:
         import yaml  # Hermes depends on PyYAML
@@ -58,7 +69,9 @@ def _read_profile_yaml(path: Path) -> dict:
         indent = len(raw) - len(raw.lstrip())
         line = raw.strip()
         if line.startswith("- ") and key:
-            data.setdefault(key, []).append(line[2:].strip().strip("'\""))
+            items = data.setdefault(key, [])
+            if isinstance(items, list):
+                items.append(line[2:].strip().strip("'\""))
             continue
         m = re.match(r"([A-Za-z0-9_-]+):\s*(.*)$", line)
         if not m:
@@ -71,8 +84,9 @@ def _read_profile_yaml(path: Path) -> dict:
                 data[k] = v
         else:
             stack = stack[: max(1, indent // 2)] + [k]
-            if stack[:2] == ["ui_meta", "hermes-bots"] and len(stack) == 3 and v:
-                data.setdefault("ui_meta", {}).setdefault("hermes-bots", {})[stack[2]] = _yaml_scalar(v)
+            ui = data.setdefault("ui_meta", {}) if stack[:1] == ["ui_meta"] else None
+            if isinstance(ui, dict) and stack[1:2] == ["hermes-bots"] and len(stack) == 3 and v:
+                ui.setdefault("hermes-bots", {})[stack[2]] = _yaml_scalar(v)
     return data
 
 

@@ -12,7 +12,9 @@ from __future__ import annotations
 import base64
 import hashlib
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 
 from . import accounts, blobatar, hermes_face, server, state
@@ -21,18 +23,26 @@ log = logging.getLogger(__name__)
 
 ASSET_EXTS = ("png", "jpg", "webp")  # Hermes's own list (profiles.set_asset)
 _STILL_SIZE = 160  # Desktop's own raster of a drawn face (avatar-image.ts, isBackfilledFacePng)
+_MAX_PICTURE = 256 * 1024  # Annotary refuses a larger image
+_STILL_FORMAT = b"frame0-png-1"  # change it when static_png's output changes, so every still is sent again
 
 
 @dataclass(frozen=True)
 class Face:
     image: bytes
-    static: bytes | None = None
+    draw_static: Callable[[], bytes] | None = None
+
+    @cached_property
+    def static(self) -> bytes | None:
+        return self.draw_static() if self.draw_static else None
 
     @property
     def hash(self) -> str:
+        """Of the image alone: a still is drawn from the same shape and color as its SVG, so the
+        SVG's bytes cover it, and a pass with nothing to upload draws nothing."""
         h = hashlib.sha256(self.image)
         h.update(b"\0")
-        h.update(self.static or b"")
+        h.update(_STILL_FORMAT if self.draw_static else b"")
         return h.hexdigest()[:32]
 
 
@@ -42,42 +52,47 @@ def _meta(home: Path) -> dict:
     return bots if isinstance(bots, dict) else {}
 
 
-def _asset(home: Path) -> Path | None:
+def _is_picture(data: bytes) -> bool:
+    return (data.startswith((b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff"))
+            or (data[:4] == b"RIFF" and data[8:12] == b"WEBP"))
+
+
+def _picture(home: Path) -> bytes | None:
+    """The profile's own ``assets/avatar.*``, if it is one Annotary can take."""
     for ext in ASSET_EXTS:
-        p = home / "assets" / f"avatar.{ext}"
-        if p.is_file():
-            return p
+        path = home / "assets" / f"avatar.{ext}"
+        if not accounts.own_file(path, home):
+            continue
+        try:
+            with open(path, "rb") as f:
+                data = f.read(_MAX_PICTURE + 1)
+        except OSError:
+            continue
+        if len(data) <= _MAX_PICTURE and _is_picture(data):
+            return data
     return None
 
 
-def _is_desktop_still(path: Path) -> bool:
-    try:
-        with open(path, "rb") as f:
-            head = f.read(24)
-    except OSError:
-        return False
-    return (head[:8] == b"\x89PNG\r\n\x1a\n" and int.from_bytes(head[16:20], "big") == _STILL_SIZE
-            and int.from_bytes(head[20:24], "big") == _STILL_SIZE)
-
-
-def _as_is(asset: Path | None) -> Face | None:
-    return Face(asset.read_bytes()) if asset else None
+def _is_desktop_still(data: bytes) -> bool:
+    return (data[:8] == b"\x89PNG\r\n\x1a\n" and int.from_bytes(data[16:20], "big") == _STILL_SIZE
+            and int.from_bytes(data[20:24], "big") == _STILL_SIZE)
 
 
 def face_for(pid: str, home: Path) -> Face | None:
     """The face Desktop shows for this profile, or None when there is nothing to show."""
-    meta, asset = _meta(home), _asset(home)
+    meta, picture = _meta(home), _picture(home)
+    as_is = Face(picture) if picture else None
     if meta.get("pet"):
-        return _as_is(asset)  # a petdex sprite: only Desktop can draw it
+        return as_is  # a petdex sprite: only Desktop can draw it
     kind = meta.get("imageKind")
-    if asset and (kind == "photo" or (kind is None and not _is_desktop_still(asset))):
-        return _as_is(asset)
+    if picture and (kind == "photo" or (kind is None and not _is_desktop_still(picture))):
+        return as_is
     shape, color = hermes_face.appearance(pid, meta)
     if blobatar.is_recipe(shape):
         return Face(blobatar.face(shape, pid).svg(64).encode())  # static in Desktop too
     if shape.startswith("sigil-"):
-        return _as_is(asset)  # line art, drawn from code this port does not carry
-    return Face(hermes_face.animated_svg(shape, color).encode(), hermes_face.static_png(shape, color))
+        return as_is  # line art, drawn from code this port does not carry
+    return Face(hermes_face.animated_svg(shape, color).encode(), lambda: hermes_face.static_png(shape, color))
 
 
 def _upload(tok: str, face: Face) -> None:

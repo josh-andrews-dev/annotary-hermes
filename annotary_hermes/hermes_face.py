@@ -44,7 +44,9 @@ MATH_SHAPES = ("circle", "squircle", "pill", "triangle", "hexagon", "cloud", "dr
 PRIMARY_COLOR = "#8b5cf6"
 CLOUD_PATH = "M11 32 a7.5 7.5 0 0 1 -1 -14.9 A9.5 9.5 0 0 1 29 12.5 A7 7 0 0 1 30 32 Z"
 
-_COLOR = re.compile(r"#[0-9a-fA-F]{3,8}|hsla?\([0-9 .,%/deg-]{1,48}\)|rgba?\([0-9 .,%/-]{1,48}\)")
+_COLOR = re.compile(r"#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})"
+                    r"|hsla?\([0-9 .,%/deg-]{1,48}\)|rgba?\([0-9 .,%/-]{1,48}\)")
+_NUMBER = re.compile(r"(-?(?:\d+\.?\d*|\.\d+))(%|deg)?")
 
 # The idle pose's terms, facePose(): (amplitude, angular speed).
 _TURN = (1.5, 0.5)
@@ -75,7 +77,13 @@ def profile_color(name: str) -> str | None:
 
 def valid_color(color: object) -> str | None:
     """*color* if it is a CSS color of a form this file can draw, else None: it goes into the SVG."""
-    return color if isinstance(color, str) and _COLOR.fullmatch(color) else None
+    if not isinstance(color, str) or not _COLOR.fullmatch(color):
+        return None
+    try:
+        _parse_rgba(color)
+    except ValueError:
+        return None
+    return color
 
 
 def appearance(name: str, meta: dict | None) -> tuple[str, str]:
@@ -248,19 +256,42 @@ def animated_svg(shape: str, color: str, size: int = 64) -> str:
 # ---- Frame 0 as a PNG ------------------------------------------------------------
 
 
+def _clamp(v: float) -> float:
+    return max(0.0, min(1.0, v))
+
+
 def _parse_rgba(color: str) -> tuple[float, float, float, float]:
-    """A color of the forms :func:`valid_color` accepts, as 0-1 channels."""
+    """A CSS hex, rgb() or hsl() color as 0-1 channels, out-of-range values clamped as CSS does.
+    Raises ValueError for anything else."""
     if color.startswith("#"):
         h = color[1:]
         if len(h) in (3, 4):
             h = "".join(c * 2 for c in h)
-        h = (h + "ff")[:8] if len(h) >= 6 else "000000ff"
+        h = (h + "ff")[:8]
         return tuple(int(h[i:i + 2], 16) / 255 for i in (0, 2, 4, 6))  # type: ignore[return-value]
-    nums = [float(n) for n in re.findall(r"-?[0-9.]+", color)]
-    alpha = nums[3] if len(nums) > 3 else 1.0
+    tokens = [t for t in re.split(r"[\s,/]+", color[color.index("(") + 1:-1]) if t]
+    if len(tokens) not in (3, 4):
+        raise ValueError(color)
+    parts = []
+    for token in tokens:
+        m = _NUMBER.fullmatch(token)
+        if not m:
+            raise ValueError(color)
+        parts.append((float(m[1]), m[2] or ""))
+    alpha = 1.0
+    if len(parts) == 4:
+        value, unit = parts[3]
+        if unit == "deg":
+            raise ValueError(color)
+        alpha = _clamp(value / 100 if unit == "%" else value)
     if color.startswith("rgb"):
-        return nums[0] / 255, nums[1] / 255, nums[2] / 255, alpha
-    h, s, li = nums[0] % 360, nums[1] / 100, nums[2] / 100
+        if any(unit == "deg" for _, unit in parts[:3]):
+            raise ValueError(color)
+        r, g, b = (_clamp(value / 100 if unit == "%" else value / 255) for value, unit in parts[:3])
+        return r, g, b, alpha
+    if parts[0][1] == "%" or parts[1][1] == "deg" or parts[2][1] == "deg":
+        raise ValueError(color)
+    h, s, li = parts[0][0] % 360, _clamp(parts[1][0] / 100), _clamp(parts[2][0] / 100)
     a = s * min(li, 1 - li)
 
     def channel(n: float) -> float:  # CSS Color 4, hslToRgb

@@ -114,8 +114,8 @@ def _finalize(h: int) -> int:
 def _js_trim(s: str) -> str:
     # String.prototype.trim: WhiteSpace and LineTerminator. Python's strip()
     # also takes U+001C..U+001F, which JavaScript keeps.
-    ws = "\t\n\v\f\r              " \
-         "    　﻿"
+    ws = ("\t\n\v\f\r \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a"
+          "\u2028\u2029\u202f\u205f\u3000\ufeff")
     return s.strip(ws)
 
 
