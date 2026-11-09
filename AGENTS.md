@@ -7,8 +7,7 @@ Annotary for Hermes Agent: review your agents' plans and documents with comments
 
 Also follow `.agents/rules/standard.md`, the standard rules for this repo.
 
-Tracker: Notion while the repo is private (created with its first item, per the `tracker` skill),
-then this repo's GitHub Issues.
+Tracker: this repo's GitHub Issues.
 
 ## Project rules
 
