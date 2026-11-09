@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from . import accounts, server, state
+from . import accounts, enablement, server, state
 
 
 def record_share(doc: str, *, name: str, profile: str, session_key: str, surface: str, path: str,
@@ -35,6 +35,8 @@ def set_editor_for_handle(doc: str, handle: str, root: Path | None = None) -> di
     pid = accounts.active_handles(root).get((handle or "").lstrip("@").strip())
     if not pid:
         raise ValueError("not an active Bot of this Hermes install")
+    if not enablement.has_annotary(enablement.plugin_state(pid, root)):
+        raise ValueError(f"Annotary is off in that Bot's profile; turn it on with `{enablement.turn_on(pid)}`")
     return set_editor(doc, pid, root=root)
 
 

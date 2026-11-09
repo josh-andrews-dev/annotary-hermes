@@ -13,12 +13,33 @@ a Document keeps its Versions, Threads and replies.
 
 ```bash
 hermes plugins install josh-andrews-dev/annotary-hermes --enable
-hermes annotary enable --all        # tools in every profile (see below)
+hermes annotary enable --all        # tools in every profile
 hermes gateway restart --detach
 hermes annotary wake on             # optional: let Send back, Approve and @mentions wake the chat
 ```
 
 Needs Hermes 0.23.0 or newer, on macOS or Linux (WSL counts as Linux).
+
+### Profiles you make later
+
+Hermes loads a plugin into a profile only from that profile's own `plugins/` folder, and only
+once its `config.yaml` enables it. So run `hermes annotary enable --all` again after making a
+profile:
+
+- **`hermes profile create NAME`** makes a profile with no Annotary: its agent has no Annotary
+  tools or skill and does not know Annotary exists. `hermes -p NAME plugins enable annotary` alone
+  fails ("No plugin named 'annotary'"), because the plugin is not in that profile's folder.
+- **A clone of default** (`hermes profile create NAME --clone`, or a new Bot in Desktop's Bot
+  Mode) has Annotary on, but as its own copy of the plugin, which plugin updates never reach.
+  `enable --all` replaces that copy with a link to the installed plugin.
+
+A profile you don't want to know about Annotary stays that way. After `hermes -p NAME plugins
+disable annotary`, `enable --all` leaves it off, `doctor` and `members` don't complain about it,
+and its Bot can't be made a Document's editor. `hermes annotary enable NAME` turns it back on.
+
+The plugin says so: `hermes annotary members` and `hermes annotary doctor` mark each profile
+where Annotary is off or runs its own copy, the reconcile reports it once, and a Document cannot be
+handed to a Bot whose profile has Annotary off.
 
 ## What you get
 
@@ -74,7 +95,7 @@ Disclosed per the Hermes plugin catalog rules. Nothing leaves the machine except
 | Shared state | `$HERMES_ROOT/annotary/state.json` | Which Member each profile is, each Document's editor and sharing session. No secrets. |
 | Each Bot's face | The private server (from `profile.yaml` and `assets/avatar.*`) | Read from the profile and uploaded to the loopback server with that Bot's own Token, only when it changes. A photo is sent as it is. |
 | The page | `$HERMES_ROOT/desktop-plugins/annotary/plugin.js` | See below. |
-| Plugin links | `<profile home>/plugins/annotary` → the installed plugin | Only from `hermes annotary enable --all`, which then runs `hermes -p <profile> plugins enable annotary` for each profile. |
+| Plugin links | `<profile home>/plugins/annotary` → the installed plugin | Only from `hermes annotary enable --all` or `enable <profile>`, which then run `hermes -p <profile> plugins enable annotary` (`--all` skips a profile where you turned the plugin off). Where a cloned profile holds its own copy of this plugin (its `plugin.yaml` names `annotary` and it has the `annotary_hermes` package), that copy is removed and replaced by the link; any other folder there is left alone. |
 
 **Why the page is a standalone desktop plugin.** Hermes loads a package's own `desktop/` half
 switched off in each new browser, and in Safari on Hermes 0.23 the Capabilities page that switches
@@ -92,7 +113,8 @@ folder; `hermes plugins remove annotary` leaves it, so delete it by hand after r
 | `hermes annotary setup` | Install the binary, start the server, put the page in place, sync Members |
 | `hermes annotary status` | Server, page, Members and recent wake-ups, as JSON |
 | `hermes annotary members` | Which Member each profile is |
-| `hermes annotary enable --all` | Tools on in every profile (a profile made later needs it again) |
+| `hermes annotary enable --all` | Tools on in every profile you have not turned off (a profile made later needs it again) |
+| `hermes annotary enable PROFILE` | Tools on in one profile, including one where you turned them off |
 | `hermes annotary wake on\|off` | Let Send back, Approve and @mentions wake the chat |
 | `hermes annotary doctor` | Check and repair; prints the `webapp:` settings for a VPS or Docker |
 | `hermes annotary stop` / `logs` | Stop the server / its log |

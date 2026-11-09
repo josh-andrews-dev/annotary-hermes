@@ -29,10 +29,23 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
-def make_profile(root: Path, name: str, profile_yaml: str = "") -> Path:
+def make_profile(root: Path, name: str, profile_yaml: str = "", *, annotary: bool = True) -> Path:
+    """A profile home. With *annotary*, the plugin is linked into it and enabled, as after
+    `hermes annotary enable --all` (the default profile holds the installed plugin itself)."""
     home = root if name == "default" else root / "profiles" / name
     home.mkdir(parents=True, exist_ok=True)
-    (home / "config.yaml").write_text("model: test\n")
+    config = "model: test\n"
+    if annotary:
+        config += "plugins:\n  enabled:\n    - annotary\n  disabled: []\n"
+        here = home / "plugins" / "annotary"
+        if not here.exists():
+            here.parent.mkdir(parents=True, exist_ok=True)
+            if name == "default":
+                (here / "annotary_hermes").mkdir(parents=True)
+                (here / "plugin.yaml").write_text((ROOT / "plugin.yaml").read_text())
+            else:
+                here.symlink_to(ROOT, target_is_directory=True)
+    (home / "config.yaml").write_text(config)
     if profile_yaml:
         (home / "profile.yaml").write_text(profile_yaml)
     return home
