@@ -1,0 +1,10 @@
+{
+  "about": "Deliberate exceptions to the private-check (scripts/standard/private_check.py). This file is the repo's: an upgrade leaves it alone. Each entry: {\"where\": \"<glob of a path or a finding's where>\", \"category\": \"<category>\", \"reason\": \"<why this is fine>\"}. Never write the matched word here: this file is public.",
+  "exceptions": [
+    {
+      "where": "LICENSE-*",
+      "category": "person",
+      "reason": "The license names its copyright holder."
+    }
+  ]
+}
