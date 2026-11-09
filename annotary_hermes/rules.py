@@ -19,6 +19,10 @@ from dataclasses import dataclass
 
 REVIEW_ACTIONS = ("send-back", "approve")
 AGENT_WAKES_PER_HOUR = 3
+# What each wake_log outcome means. "woke" only says Hermes accepted the message, not that a turn ran.
+OUTCOME_TEXT = {"woke": "Message handed to Hermes; this does not show a turn ran",
+                "notified": "No session took it; kept as a notification",
+                "capped": "Dropped: too many wake-ups between Bots on this Document"}
 HOUR = 3600.0
 COMMENT_TYPES = ("thread.created", "thread.replied")
 

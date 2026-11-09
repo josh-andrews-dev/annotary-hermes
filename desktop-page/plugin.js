@@ -335,7 +335,7 @@ function AnnotaryPage() {
   const [error, setError] = useState(null)
   const [doc, setDoc] = useState(hashDoc())
   const load = useCallback(() => {
-    rest('/docs').then(r => { setDocs(r.docs); setError(null) }).catch(err => setError(errText(err)))
+    rest('/documents').then(r => { setDocs(r.docs); setError(null) }).catch(err => setError(errText(err)))
     rest('/status').then(setStatus).catch(() => {})
   }, [])
   const refresh = useLive(load, [])

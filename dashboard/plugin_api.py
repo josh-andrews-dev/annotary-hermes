@@ -4,7 +4,7 @@ The page reaches the private server only through these routes (they act as the o
 works from every surface: native Desktop, Desktop over SSH, the Webapp on a phone.
 
     GET  /status             server, wake-ups, whether the server has embed mode
-    GET  /docs               the Document list, with each Document's editor
+    GET  /documents          the Document list, with each Document's editor
     GET  /doc?id=ID          one Document: header, rendered HTML, open Threads, Actions, editor
     POST /act      {doc, action}
     POST /comment  {doc, text}               a Comment on the whole Document
@@ -113,7 +113,7 @@ def _docs() -> dict:
                       **_editor_view(st, d["id"])} for d in rows]}
 
 
-@router.get("/docs")
+@router.get("/documents")  # not /docs: a non-default profile's plugin host would serve FastAPI's Swagger page there
 async def docs():
     return await asyncio.to_thread(_docs)
 
