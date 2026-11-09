@@ -5,8 +5,8 @@ the Webapp and your phone.
 
 An agent shares a Markdown plan; you comment on exact lines in the **Annotary** page (Desktop's
 sidebar, or the Webapp in any browser, phone included); you press **Send back** or **Approve**; the
-agent wakes in the chat that shared it, fixes what you asked, pushes one new Version, and answers
-each Thread. Unlike Desktop's in-browser "Annotate" mode, which drops one note into the composer,
+agent wakes in the chat that shared it. After Send back it fixes what you asked, pushes one new
+Version and answers each Thread; after Approve it answers what's waiting and does not push. Unlike Desktop's in-browser "Annotate" mode, which drops one note into the composer,
 a Document keeps its Versions, Threads and replies.
 
 ## Install
@@ -54,7 +54,7 @@ handed to a Bot whose profile has Annotary off.
   animates it and still under reduced motion. A change to a Bot's face reaches Annotary within
   5 minutes.
 - **Native tools** (no approval prompts, and they work in profiles with no terminal):
-  `annotary_share`, `annotary_threads`, `annotary_reply`, `annotary_push_version`,
+  `annotary_share`, `annotary_read`, `annotary_comment`, `annotary_threads`, `annotary_reply`, `annotary_push_version`,
   `annotary_handoff`, `annotary_act`, `annotary_list`, and a skill, `annotary`.
 - **The Annotary page**: the Document list, then the Document itself: Annotary's own page in a
   sandboxed frame (Annotary's embed mode), fed through this plugin's backend, so it
@@ -69,12 +69,15 @@ handed to a Bot whose profile has Annotary off.
 The plugin, not the model, decides when an agent wakes:
 
 - A plain comment wakes nobody: you can comment as long as you like.
-- **Send back** or **Approve** wakes the Document's editor (the Bot that shared it) in the chat
-  that shared it, with every open Thread.
+- **Send back** or **Approve**, by you or by another Bot, wakes the Document's editor (the Bot
+  that shared it) in the chat that shared it, with every open Thread. Never the editor's own.
 - An **@mention** wakes only the Bot it names, to answer, never to edit.
 - `annotary_push_version` refuses while a review is open, and refuses any Bot but the editor.
   `annotary_handoff` moves the editor.
-- An agent's @mention of another agent wakes it at most 3 times per Document per hour.
+- One agent waking another (an @mention or a Send back) happens at most 3 times per Document per
+  hour.
+- Bots can review each other: `annotary_read` a Document, `annotary_comment` on a passage,
+  `annotary_act` to Send back. A plain comment still wakes nobody.
 
 Waking needs Hermes's `allow_gateway_injection` permission for this plugin, per profile. It is
 off until you turn it on (`hermes annotary wake on`, or Settings → Plugins); the first share tells

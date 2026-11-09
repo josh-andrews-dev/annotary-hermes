@@ -1,5 +1,7 @@
 """The wake and editor rules (D5, D11), as pure functions."""
 
+from conftest import ROOT
+
 from annotary_hermes import rules
 
 MANAGED = {"coder": "coder", "bencha": "bencha", "hermes": "default"}
@@ -30,7 +32,7 @@ def test_no_editor_no_wake_and_other_actions_ignored():
 
 
 def test_an_agents_own_action_wakes_nobody():
-    assert rules.decide(ev("action.taken", "bencha", action="approve"), managed=MANAGED, editor="coder") == []
+    assert rules.decide(ev("action.taken", "coder", action="approve"), managed=MANAGED, editor="coder") == []
 
 
 def test_mention_wakes_only_the_named_bot():
@@ -92,3 +94,10 @@ def test_review_restarts_at_the_latest_push_or_review_action():
     assert rules.review_open([push, comment, send_back, comment], managed=MANAGED) is True
     # an agent's own Approve does not end the person's review
     assert rules.review_open([push, comment, ev("action.taken", "bencha", action="approve")], managed=MANAGED) is True
+
+
+def test_the_rule_summary_says_what_the_readme_says_about_approve():
+    summary, readme = (" ".join(t.split()) for t in (rules.__doc__, (ROOT / "README.md").read_text()))
+    wording = "After Send back it fixes what you asked, pushes one new Version and answers each Thread; " \
+              "after Approve it answers what's waiting and does not push."
+    assert wording in readme and wording in summary

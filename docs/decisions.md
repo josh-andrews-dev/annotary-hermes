@@ -126,6 +126,28 @@ is in the Annotary repo, `docs/plans/hermes-edition.md`.
   face functions fails when a Hermes update changes them, since Desktop never redraws an
   existing PNG.
 
+## 2026-11-08: Bots review each other
+
+- **`annotary_comment` takes a quote, not a position.** The tool finds the passage in the head
+  Version and posts its `L:C-L:C` range with `--version`. A quote that is missing or matches more
+  than once is refused with what to do; rejected picking the first match, because a comment on the
+  wrong line reads as a real one.
+- **`annotary_read` was added with it.** A reviewer has to see a Document it did not write, and a
+  profile may have no terminal. Rejected adding the text to `annotary_threads`, which every woken
+  agent calls and would pay for each time.
+- **A Bot's Send back or Approve wakes the editor** (never the editor's own). Rejected keeping it
+  to people, because a Bot's Send back then did nothing at all. It counts against the cap of 3
+  wake-ups between Bots per Document per hour.
+- **A Bot's Action does not end a person's review.** Its Send back still wakes the editor, but
+  while a person has commented and not decided, the editor's push stays refused. Rejected letting a
+  Bot end it, because that would let an agent overrule someone who is still reading.
+- **`annotary_act` refuses the editor's own Send back or Approve.** Chose to refuse in the tool;
+  rejected leaving it to the wake rule because the Action wakes nobody but is still recorded as an
+  author approving its own work. Other Actions, and a Document with no recorded editor, pass.
+- **A quote keeps its indentation, and loses only the newlines around it.** Chose to look for the
+  quote as given first and drop other padding only if that finds nothing; rejected stripping every
+  quote because an indented code line then matched too widely or anchored a narrower range.
+
 ## 2026-11-08: Annotary v0.5.0
 
 - **Pinned Annotary v0.5.0** for Member avatars. Each tarball was checked against the release's

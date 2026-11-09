@@ -14,6 +14,8 @@ tags: [review, documents, desktop, webapp]
 requires_hermes: ">=0.23.0"
 provides_tools:
   - annotary_share
+  - annotary_read
+  - annotary_comment
   - annotary_threads
   - annotary_reply
   - annotary_push_version

@@ -1,12 +1,15 @@
 """Annotary's review rule, enforced by the plugin (D5, D11). Pure functions: no I/O.
 
 - A plain Comment wakes nobody.
-- Send back or Approve by a person wakes the Document's editor, to fix, push once and resolve.
+- Send back or Approve wakes the Document's editor, whether a person or another Bot chose it. Never
+  for the editor's own Action. After Send back it fixes what you asked, pushes one new Version and
+  answers each Thread; after Approve it answers what's waiting and does not push.
+- The editor does not Send back or Approve its own Document: annotary_act refuses it.
 - An @mention wakes only the Bot it names, to answer that Thread, never to push.
-- Never for an agent's own Comment; an agent's @mention of another agent wakes it at most
-  AGENT_WAKES_PER_HOUR times per Document per hour.
+- Never for an agent's own Comment; a wake from one agent to another (an @mention or a Send back)
+  happens at most AGENT_WAKES_PER_HOUR times per Document per hour.
 - A push is refused while a review is open: a person has commented on the head Version since it
-  was pushed and has neither sent it back nor approved it.
+  was pushed and has neither sent it back nor approved it. A Bot's Action does not end it.
 - Only the editor may push.
 """
 
@@ -47,7 +50,7 @@ def decide(event: dict, *, managed: dict[str, str], editor: str | None) -> list[
                   by_agent=author is not None)
     if etype == "action.taken":
         action = payload.get("action") or ""
-        if author is None and action in REVIEW_ACTIONS and editor:
+        if action in REVIEW_ACTIONS and editor and author != editor:
             return [Wake(profile=editor, reason="review", action=action, **common)]
         return []
     if etype in COMMENT_TYPES:
@@ -82,12 +85,21 @@ def review_open(events: list[dict], *, managed: dict[str, str]) -> bool:
     return any(e.get("type") in COMMENT_TYPES and (e.get("by") or "") not in managed for e in events[last + 1:])
 
 
+def review_refusal(*, profile: str, editor: str | None) -> str | None:
+    """Why *profile* may not Send back or Approve this Document, else None."""
+    if editor and editor == profile:
+        return ("You are this Document's editor, and an author does not Send back or Approve its own work. "
+                "That is for a reviewer: another Bot through annotary_act, or the person in Annotary. "
+                "To have another Bot edit it instead, use annotary_handoff.")
+    return None
+
+
 def push_refusal(*, profile: str, editor: str | None, editor_handle: str | None, review_is_open: bool,
                  review_over: bool) -> str | None:
     """Why *profile* may not push a new Version now, else None."""
     if editor and editor != profile:
         who = f"@{editor_handle}" if editor_handle else editor
-        return (f"{who} edits this Document: comment on it with annotary_reply, or @mention {who} "
+        return (f"{who} edits this Document: comment on a passage with annotary_comment, or @mention {who} "
                 "in a Thread. Only the editor pushes; the editor can hand off with annotary_handoff.")
     if review_is_open and not review_over:
         return ("A review is open: the person has commented on this Version and has not sent it back "

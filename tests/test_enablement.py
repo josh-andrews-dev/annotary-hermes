@@ -429,7 +429,7 @@ def test_the_skill_is_registered_with_its_description():
     spec.loader.exec_module(plugin)
     ctx = FakeCtx()
     plugin.register(ctx)
-    assert len(ctx.tools) == 7
+    assert len(ctx.tools) == 9
     (skill,) = ctx.skills
     assert skill["name"] == "annotary"
     # Hermes shows the first 60 characters in the system prompt's skill index: they must say what it is.
