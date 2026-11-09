@@ -1,12 +1,16 @@
 """What `doctor` says about the Webapp, and what `status` says a wake-up means."""
 
+import importlib.util
 import json
 import subprocess
+import sys
 import time
+import types
 
 import pytest
+from conftest import ROOT
 
-from annotary_hermes import cli, state
+from annotary_hermes import cli, desktop, paths, state
 
 ADVICE = "Where Web Access cannot be switched on"
 
@@ -48,6 +52,61 @@ def test_a_configured_public_address_is_where_annotary_links_open(webapp, capsys
     webapp("Serving at http://[::1]:9120", "webapp:\n  enabled: true\n  public_url: https://agent.example.test/\n")
     out = doctor_output(capsys)
     assert ADVICE not in out and "https://agent.example.test/#/annotary?doc=<id>" in out
+
+
+def test_a_public_address_on_a_webapp_that_is_off_is_not_advertised(webapp, capsys):
+    webapp("The Webapp is not enabled.", "webapp:\n  enabled: false\n  public_url: https://agent.example.test\n")
+    out = doctor_output(capsys)
+    assert ADVICE in out and "agent.example.test" not in out
+
+
+@pytest.mark.parametrize("bad", ["example.test", "9120", "ftp://agent.example.test", "https://user@agent.example.test"])
+def test_a_public_address_hermes_would_reject_is_not_advertised(webapp, capsys, bad):
+    webapp("Serving at http://[::1]:9120", f"webapp:\n  enabled: true\n  public_url: {bad}\n")
+    out = doctor_output(capsys)
+    assert bad not in out.replace("[::1]:9120", "") and ADVICE not in out
+
+
+def test_enabled_must_be_true_not_merely_present(webapp, capsys):
+    webapp("The Webapp is not enabled.", "webapp:\n  enabled: 'false'\n")
+    assert ADVICE in doctor_output(capsys)
+
+
+def test_hermes_own_reader_wins_when_it_is_there(webapp, capsys, monkeypatch):
+    """Inside Hermes the config can be a link, or PyYAML absent: Hermes's reader handles both."""
+    webapp("The gateway is still starting the Webapp.")
+    listener = types.ModuleType("gateway.webapp_listener")
+    listener.webapp_settings = lambda home: types.SimpleNamespace(enabled=True, public_url="https://hermes.example.test")
+    monkeypatch.setitem(sys.modules, "gateway", types.ModuleType("gateway"))
+    monkeypatch.setitem(sys.modules, "gateway.webapp_listener", listener)
+    out = doctor_output(capsys)
+    assert ADVICE not in out and "https://hermes.example.test/#/annotary?doc=<id>" in out
+
+
+def test_a_stale_page_is_refreshed_from_the_page_status_call(hermes):
+    spec = importlib.util.spec_from_file_location("annotary_dashboard_page_heal", ROOT / "dashboard" / "plugin_api.py")
+    api = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(api)
+    page = paths.desktop_page_target() / "plugin.js"
+    page.parent.mkdir(parents=True, exist_ok=True)
+    page.write_text("// an older copy of the page\n")
+    assert not desktop.page_status()["current"]
+    api._status()
+    assert desktop.page_status()["current"]
+    stamp = page.stat().st_mtime_ns
+    api._status()
+    assert page.stat().st_mtime_ns == stamp  # nothing rewritten when it is already current
+
+
+def test_a_page_that_cannot_be_refreshed_does_not_stop_the_status_call(hermes, monkeypatch, caplog):
+    spec = importlib.util.spec_from_file_location("annotary_dashboard_page_err", ROOT / "dashboard" / "plugin_api.py")
+    api = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(api)
+    def refuse(*_a, **_k):
+        raise OSError("read-only")
+    monkeypatch.setattr(desktop, "install_page", refuse)
+    assert api._status()["ok"] is True
+    assert "could not refresh the desktop page" in caplog.text
 
 
 def test_status_does_not_claim_a_turn_ran(hermes, capsys):
