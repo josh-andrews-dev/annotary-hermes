@@ -11,6 +11,7 @@ import json
 import re
 import secrets
 import shutil
+import tempfile
 import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,6 +20,7 @@ from . import accounts, docs, enablement, paths, rules, server, state
 
 CARD = '::annotary{{doc="{doc}"}}'
 DOC_RE = re.compile(r"^[A-Za-z0-9._/~ -]{1,200}$")
+READ_MAX_CHARS = 200_000  # what one tool result may hand the model
 
 
 @dataclass
@@ -215,6 +217,86 @@ def threads(c: Caller, *, doc: str, open_only: bool = True, root: Path | None = 
             "you_are_editor": editor == c.profile, "threads": rows}
 
 
+def _head_text(tok: str, doc: str, root: Path | None) -> tuple[dict, str]:
+    """The head Version's header and its Markdown source, byte for byte."""
+    head = docs.resolve_id(doc, tok, root)
+    with tempfile.TemporaryDirectory() as out:
+        r = server.run_cli(tok, ["pull", head["id"], "--version", str(head["version"]), "--out", out], root=root)
+        if r.returncode != 0:
+            raise ToolError(r.stderr.strip()[-600:] or f"could not read {doc}")
+        return head, next(Path(out).glob("*.md")).read_bytes().decode("utf-8")
+
+
+def _quoted_passage(text: str, quote: str) -> str:
+    """What *quote* points at: newlines around it are never part of it, indentation is, and other
+    padding goes only when the quote is not in the text with it."""
+    exact = quote.strip("\r\n")
+    return exact if exact in text else quote.strip()
+
+
+def _find_quote(text: str, quote: str) -> tuple[str, str]:
+    """The ``L:C-L:C`` anchor of *quote* in *text* (lines from 1, columns from 0 in code points,
+    half-open), and "", or "" and why it cannot be anchored."""
+    hits, at = [], text.find(quote)
+    while at >= 0:
+        hits.append(at)
+        at = text.find(quote, at + 1)
+    if len(hits) > 1:
+        return "", (f"That quote appears {len(hits)} times in this Version. Quote a longer passage, "
+                    "so it matches exactly one place.")
+    if not hits:
+        same_words = " ".join(quote.split()).lower() in " ".join(text.split()).lower()
+        return "", (("The words are there, but with different spacing or capitals. " if same_words else
+                     "That quote is not in this Version. ")
+                    + "Copy the passage exactly from annotary_read's text, Markdown included.")
+
+    def where(i: int) -> str:
+        return f"{text.count(chr(10), 0, i) + 1}:{i - (text.rfind(chr(10), 0, i) + 1)}"
+
+    return f"{where(hits[0])}-{where(hits[0] + len(quote))}", ""
+
+
+@_with_pending
+def read(c: Caller, *, doc: str, root: Path | None = None) -> dict:
+    tok = _prepare(c, root)
+    head, text = _head_text(tok, _check_doc(doc), root)
+    editor = (docs.info(head["id"], root) or {}).get("editor")
+    return {"doc": head["id"], "name": head.get("name"), "version": head["version"],
+            "editor": f"@{accounts.handle_of(editor, root)}" if editor else None,
+            "you_are_editor": editor == c.profile, "text": text[:READ_MAX_CHARS],
+            **({"truncated": True} if len(text) > READ_MAX_CHARS else {})}
+
+
+@_with_pending
+def comment(c: Caller, *, doc: str, quote: str, body: str, version: int = 0, root: Path | None = None) -> dict:
+    tok = _prepare(c, root)
+    doc = _check_doc(doc)
+    quote = quote or ""
+    if not quote.strip():
+        raise ToolError("quote is empty: give the exact passage this comment is about")
+    if not (body or "").strip():
+        raise ToolError("body is empty")
+    head, text = _head_text(tok, doc, root)
+    doc_id, head_version = head["id"], head["version"]
+
+    def refused(reason: str) -> dict:
+        return {"refused": True, "reason": reason, "doc": doc_id, "version": head_version}
+
+    moved = "Read it again with annotary_read, then comment on what it says now."
+    if version and int(version) != head_version:
+        return refused(f"You read Version {version}, but this Document is now at Version {head_version}. {moved}")
+    anchor, why = _find_quote(text, _quoted_passage(text, quote))
+    if not anchor:
+        return refused(why)
+    r = server.run_cli(tok, ["thread", "new", doc_id, anchor, "-m", "-", "--version", str(head_version), "--json"],
+                       root=root, stdin=body)
+    if r.returncode == 5:  # the CLI's own refusal: head moved after the text above was read
+        return refused(f"This Document changed while you were commenting. {moved}")
+    if r.returncode != 0:
+        raise ToolError(r.stderr.strip()[-600:] or f"annotary thread new failed ({r.returncode})")
+    return {**json.loads(r.stdout), "doc": doc_id, "version": head_version}
+
+
 @_with_pending
 def reply(c: Caller, *, doc: str, thread: str, text: str, resolve: bool = False,
           root: Path | None = None) -> dict:
@@ -298,6 +380,11 @@ def act(c: Caller, *, doc: str, action: str, root: Path | None = None) -> dict:
     doc = _check_doc(doc)
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,40}", action or ""):
         raise ToolError("action must be an Action id such as approve or send-back")
+    if action in rules.REVIEW_ACTIONS:
+        doc_id = docs.resolve_id(doc, tok, root)["id"]  # doc may be a Name; the record is by id
+        refusal = rules.review_refusal(profile=c.profile, editor=(docs.info(doc_id, root) or {}).get("editor"))
+        if refusal:
+            return {"refused": True, "reason": refusal, "doc": doc_id}
     return _cli_json(tok, ["act", doc, action], root)
 
 

@@ -33,6 +33,23 @@ SCHEMAS = {
             "name": {"type": "string", "description": "A short name for a new Document from markdown"},
             "message": {"type": "string", "description": "A one-line Version message"}},
             "required": []}},
+    "annotary_read": {
+        "description": "Read a Document's current text and Version, to review it or to quote it in annotary_comment.",
+        "parameters": {"type": "object", "properties": {"doc": _DOC}, "required": ["doc"]}},
+    "annotary_comment": {
+        "description": ("Leave a new comment on an exact passage of a Document, as its reviewer. Works during a "
+                        "review, and for any Bot, editor or not. A reviewer comments and does not edit: never "
+                        "annotary_push_version on a Document you do not edit. A plain comment wakes nobody; "
+                        "@mention a Bot in the body to ask it something. Use annotary_reply to answer an "
+                        "existing Thread."),
+        "parameters": {"type": "object", "properties": {
+            "doc": _DOC,
+            "quote": {"type": "string", "description": ("The passage, copied exactly from annotary_read's text, "
+                                                        "long enough to match one place only")},
+            "body": {"type": "string", "description": "The comment (Markdown)"},
+            "version": {"type": "integer", "description": ("The Version you read, from annotary_read: "
+                                                           "the comment is refused if the Document has moved on")}},
+            "required": ["doc", "quote", "body"]}},
     "annotary_threads": {
         "description": ("Read a Document's review Threads (comments anchored to lines) with their replies, open "
                         "ones by default. Answer each one you act on with annotary_reply."),
@@ -66,7 +83,9 @@ SCHEMAS = {
             "doc": _DOC, "to": {"type": "string", "description": "The Bot's handle, e.g. @coder"}},
             "required": ["doc", "to"]}},
     "annotary_act": {
-        "description": "Take an Action on a Document's head Version (e.g. approve, send-back).",
+        "description": ("Take an Action on a Document's head Version (e.g. approve, send-back). Any Bot reviewing a "
+                        "Document may send it back; that wakes its editor to fix it. Comment first, so the editor "
+                        "knows what to fix. The editor cannot Send back or Approve its own Document."),
         "parameters": {"type": "object", "properties": {
             "doc": _DOC, "action": {"type": "string"}}, "required": ["doc", "action"]}},
     "annotary_list": {
@@ -122,6 +141,8 @@ def register(ctx):
     pick = lambda *keys: (lambda a: {k: a[k] for k in keys if k in a and a[k] is not None})  # noqa: E731
     table = {
         "annotary_share": (tools.share, pick("path", "markdown", "name", "message")),
+        "annotary_read": (tools.read, pick("doc")),
+        "annotary_comment": (tools.comment, pick("doc", "quote", "body", "version")),
         "annotary_threads": (tools.threads, pick("doc", "open_only")),
         "annotary_reply": (tools.reply, pick("doc", "thread", "text", "resolve")),
         "annotary_push_version": (tools.push_version, pick("doc", "path", "markdown", "message", "review_over")),

@@ -24,11 +24,24 @@ or **Approve**. Use the `annotary_*` tools; never the `annotary` CLI through the
    don't guess. `resolve: true` only on what you fully addressed.
 6. Approved: do not push. Answer every open Thread still waiting for you, then carry on.
 
+## Reviewing a Document someone else edits
+
+Asked to review another Bot's Document? You comment, you do not edit.
+
+1. `annotary_read` it. Note the `version`.
+2. `annotary_comment` once per point: `quote` the exact passage (long enough to match one place),
+   say what is wrong in `body`, and pass `version`. Refused? Do what the reason says.
+3. Asked to decide? `annotary_act` with `send-back` (it wakes the editor to fix it) or `approve`.
+   Comment first, so the editor knows what to fix.
+
+A plain comment wakes nobody. `@editor` in a comment wakes that Bot only to answer, and uses one
+of the 3 wake-ups between Bots allowed per Document per hour; so does a Send back.
+
 ## Rules
 
 - An @mention asks you something: answer in that Thread with `annotary_reply` (or ask back if
   it is unclear). Do not push.
-- Only the editor pushes. Not the editor? Comment, or @mention the editor (`@coder`). Hand a
+- Only the editor pushes. Not the editor? `annotary_comment`, or @mention the editor (`@coder`). Hand a
   Document over with `annotary_handoff` only when the person asks.
 - `annotary_push_version` refuses mid-review; use `review_over: true` only when the person said
   in this chat that the review is over.
