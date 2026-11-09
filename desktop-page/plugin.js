@@ -223,34 +223,25 @@ function DocView({ doc, status, onChanged, onNav }) {
   if (status?.embed) {
     return jsxs('div', {
       style: { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 },
-      children: [jsx(ReviewBar, { doc, onChanged }), jsx(EmbedFrame, { doc, onNav })]
+      children: [jsx(ReviewBar, { doc }), jsx(EmbedFrame, { doc, onNav })]
     })
   }
   return jsx(NativeDocView, { doc, onChanged })
 }
 
-// Above the embedded page: the editor (D11) and Send back / Approve, the page's main buttons.
-function ReviewBar({ doc, onChanged }) {
+// Above the embedded page: the editor (D11) and the last Action. Send back and Approve are the
+// frame's own buttons, so buttons here would show them twice.
+export function ReviewBar({ doc }) {
   const [d, setD] = useState(null)
-  const [busy, setBusy] = useState(false)
   const load = useCallback(() => { rest(`/doc?id=${doc}`).then(setD).catch(() => {}) }, [doc])
-  const refresh = useLive(load, [doc])
-  const act = async action => {
-    setBusy(true)
-    try { await rest('/act', { method: 'POST', body: { doc, action } }); refresh(); onChanged(); changed({ doc }) } catch (err) { host.notifyError(err, 'Could not take the Action') } finally { setBusy(false) }
-  }
+  useLive(load, [doc])
   if (!d) return null
   return jsxs('div', {
     'data-annotary-reviewbar': doc,
     style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, padding: '6px 12px', borderBottom: '1px solid var(--ui-stroke-secondary)' },
     children: [
       jsx('div', { 'data-annotary-editor': '', style: { fontSize: 12, ...muted }, children: `Editor: ${d.editor || 'none yet'}` }),
-      d.action && jsx('div', { style: { fontSize: 12, fontWeight: 600 }, children: `${d.action.label} by @${d.action.by}` }),
-      jsx('div', { style: { flex: 1 } }),
-      ...(d.actions || []).map(a => jsx(Button, {
-        key: a.id, size: 'sm', disabled: busy, variant: a.intent === 'positive' ? 'default' : 'outline',
-        'data-annotary-action': a.id, onClick: () => act(a.id), children: a.label
-      }))
+      d.action && jsx('div', { style: { fontSize: 12, fontWeight: 600 }, children: `${d.action.label} by @${d.action.by}` })
     ]
   })
 }
