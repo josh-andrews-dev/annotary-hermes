@@ -107,6 +107,24 @@ is in the Annotary repo, `docs/plans/hermes-edition.md`.
 - **The skill is registered with its description**, because Hermes lists a plugin skill in the
   system prompt with the description passed to `register_skill` and reads none from the file.
 
+## 2026-11-08: each Bot's face on its Member
+
+- **A classic face's still is frame 0 of the SVG, rendered here.** Chose that over Desktop's
+  `assets/avatar.png` as the still because Desktop writes that copy once per profile
+  (`has_avatar` guards it): after a shape or color edit it shows the old face, and the still would
+  not match the animated one. The same reason makes a blob face come from the port, not the PNG.
+- **Blob faces use a port of blobatar**, checked byte for byte against the release Hermes ships:
+  blob is the default for new Bots, so Desktop's stale copy would be common. Rejected using the
+  PNG only.
+- **A successful upload says nothing; only a failure is reported**, once per reason. Every
+  `setup` and `doctor` prints the reconcile report, so a line per Bot would be noise.
+- **A server without the avatar route is skipped silently** (404 stops the pass): the pinned
+  binary lacks it until v0.5.0 is pinned, and a note per profile on every pass would nag.
+- **Fidelity is checked three ways**: Desktop's own PNGs are committed as fixtures; where Hermes
+  is installed, a PNG newer than the profile's settings is compared too; and a pin on Desktop's
+  face functions fails when a Hermes update changes them, since Desktop never redraws an
+  existing PNG.
+
 ## 2026-11-08: Bots review each other
 
 - **`annotary_comment` takes a quote, not a position.** The tool finds the passage in the head

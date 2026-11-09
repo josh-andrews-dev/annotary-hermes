@@ -50,6 +50,9 @@ handed to a Bot whose profile has Annotary off.
   gets the same Member back, enabled, with a new Token (the old one stays revoked). Each Bot's handle is its Bot Mode tag
   (`@coder`; the default profile is `@hermes` until you name it). You are the owner, named after
   your OS user. `hermes annotary members` shows the mapping.
+- **Each Bot's face next to its comments**: the Bot Mode face from Desktop, animated when Desktop
+  animates it and still under reduced motion. A change to a Bot's face reaches Annotary within
+  5 minutes. Needs Annotary 0.5.0 or newer; an older server keeps its initials.
 - **Native tools** (no approval prompts, and they work in profiles with no terminal):
   `annotary_share`, `annotary_read`, `annotary_comment`, `annotary_threads`, `annotary_reply`, `annotary_push_version`,
   `annotary_handoff`, `annotary_act`, `annotary_list`, and a skill, `annotary`.
@@ -93,6 +96,7 @@ Disclosed per the Hermes plugin catalog rules. Nothing leaves the machine except
 | Owner password and Token | `$HERMES_ROOT/annotary/secrets.json`, mode 600 | A long random password nobody types (it stops a browser on this machine signing in to the bare server by loopback trust); you reach Annotary only through Hermes's own sign-in. |
 | One Token per profile | `<profile home>/plugin-data/annotary/token`, mode 600 | What that profile's tools act as. Never on a command line or in a log. |
 | Shared state | `$HERMES_ROOT/annotary/state.json` | Which Member each profile is, each Document's editor and sharing session. No secrets. |
+| Each Bot's face | The private server (from `profile.yaml` and `assets/avatar.*`) | Read from the profile and uploaded to the loopback server with that Bot's own Token, only when it changes. A photo is sent as it is. |
 | The page | `$HERMES_ROOT/desktop-plugins/annotary/plugin.js` | See below. |
 | Plugin links | `<profile home>/plugins/annotary` → the installed plugin | Only from `hermes annotary enable --all` or `enable <profile>`, which then run `hermes -p <profile> plugins enable annotary` (`--all` skips a profile where you turned the plugin off). Where a cloned profile holds its own copy of this plugin (its `plugin.yaml` names `annotary` and it has the `annotary_hermes` package), that copy is removed and replaced by the link; any other folder there is left alone. |
 
@@ -137,6 +141,8 @@ one on the next call (also after a plugin upgrade that moves the pin). To switch
 taking the override out, run `hermes annotary stop`. `make validate` runs Hermes's plugin
 validator where Hermes is installed.
 
+A development build newer than the pinned binary migrates the server's store, and the pinned binary then refuses to open it. Copy `$HERMES_ROOT/annotary` before pointing a real install at one, and put the copy back afterward.
+
 ## Contributing
 
 Bug reports and feature requests go to [Issues](https://github.com/josh-andrews-dev/annotary-hermes/issues),
@@ -144,6 +150,9 @@ questions to [Discussions](https://github.com/josh-andrews-dev/annotary-hermes/d
 [CONTRIBUTING.md](CONTRIBUTING.md), and [SECURITY.md](SECURITY.md) for security reports.
 
 ## License
+
+The Bot face code carries MIT-licensed ports of Hermes Desktop's faces and of blobatar: see
+[docs/THIRD_PARTY.md](docs/THIRD_PARTY.md).
 
 Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or [MIT license](LICENSE-MIT)
 at your option.
