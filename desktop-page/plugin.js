@@ -226,14 +226,18 @@ function DocView({ doc, status, onChanged, onNav }) {
   return jsx(NativeDocView, { doc, onChanged })
 }
 
+// clientWidth, not the observer's fractional width: the frame lays out at this whole-pixel width,
+// so 849.58 px here is a frame of 850 that shows its own buttons.
+export function watchFrameWidth(el, onWidth) {
+  const observer = new ResizeObserver(() => onWidth(el.clientWidth))
+  observer.observe(el)
+  return () => observer.disconnect()
+}
+
 function EmbedDocView({ doc, onChanged, onNav }) {
   const box = useRef(null)
   const [frameWidth, setFrameWidth] = useState(null)
-  useEffect(() => {
-    const observer = new ResizeObserver(([entry]) => setFrameWidth(entry.contentRect.width))
-    if (box.current) observer.observe(box.current)
-    return () => observer.disconnect()
-  }, [])
+  useEffect(() => (box.current ? watchFrameWidth(box.current, setFrameWidth) : undefined), [])
   return jsxs('div', {
     ref: box,
     style: { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 },

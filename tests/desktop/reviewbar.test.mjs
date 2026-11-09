@@ -3,7 +3,7 @@
 import { test, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { Button } from '@hermes/plugin-sdk'
-import { ReviewBar, FRAME_ACTIONS_MIN_WIDTH } from '../../desktop-page/plugin.js'
+import { ReviewBar, FRAME_ACTIONS_MIN_WIDTH, watchFrameWidth } from '../../desktop-page/plugin.js'
 
 afterEach(() => { delete globalThis.testState })
 
@@ -47,6 +47,24 @@ for (const width of [849, 776, 390]) {
     assert.deepEqual(shown.map(b => b.props.children), ['Approve', 'Send back'])
   })
 }
+
+test('a frame box of 849.58 px counts as the 850 px the frame lays out at, so one set shows', () => {
+  const real = globalThis.ResizeObserver
+  let fire
+  globalThis.ResizeObserver = class {
+    constructor(cb) { fire = () => cb([{ contentRect: { width: 849.58 } }], this) }
+    observe() {}
+    disconnect() { this.done = true }
+  }
+  try {
+    let width = null
+    const stop = watchFrameWidth({ clientWidth: 850 }, w => { width = w })
+    fire()
+    assert.equal(width, 850)
+    assert.deepEqual(buttons(render(doc, width)), [])
+    stop()
+  } finally { globalThis.ResizeObserver = real }
+})
 
 test('before the frame has been measured the bar shows none, so two sets never flash', () => {
   assert.deepEqual(buttons(render(doc, null)), [])
