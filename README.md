@@ -59,7 +59,8 @@ handed to a Bot whose profile has Annotary off.
 - **The Annotary page**: the Document list, then the Document itself: Annotary's own page in a
   sandboxed frame (Annotary's embed mode), fed through this plugin's backend, so it
   works on native Desktop, Desktop over SSH and the Webapp on a phone. Above it, the Document's
-  editor and its last Action. If the server cannot serve the frame (a development
+  editor and its last Action. **Send back** and **Approve** are in the page's header; on a phone
+  or in a narrow window, tap the Document's name to show them. If the server cannot serve the frame (a development
   build without embed mode), the page shows the rendered Document, open Threads with reply and
   resolve, and a comment box instead. Chats on Desktop show
   an inline card for each shared Document.
