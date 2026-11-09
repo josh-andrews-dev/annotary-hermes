@@ -85,7 +85,7 @@ SCHEMAS = {
     "annotary_act": {
         "description": ("Take an Action on a Document's head Version (e.g. approve, send-back). Any Bot reviewing a "
                         "Document may send it back; that wakes its editor to fix it. Comment first, so the editor "
-                        "knows what to fix."),
+                        "knows what to fix. The editor cannot Send back or Approve its own Document."),
         "parameters": {"type": "object", "properties": {
             "doc": _DOC, "action": {"type": "string"}}, "required": ["doc", "action"]}},
     "annotary_list": {

@@ -3,6 +3,7 @@
 All against a real `annotary serve` (the `hermes` fixture). coder writes; bencha and default review.
 """
 
+import hashlib
 import importlib.util
 import json
 import sys
@@ -96,6 +97,57 @@ def test_a_comment_is_anchored_on_the_quoted_text(doc, quote):
     assert t["body"] == "Look at this." and t["author"] == "bencha"
     original = anchored(doc, t["id"])
     assert original["exact"] == quote and original["version"] == 1
+
+
+CODE = """# Retry notes
+
+    retry(job)
+
+Call retry(job) once. A deeper line:
+
+        backoff(job)
+
+Then stop.
+"""
+
+
+@pytest.fixture()
+def code_doc(hermes):
+    accounts.reconcile()
+    return tools.share(caller("coder"), markdown=CODE, name="Retry", message="first")["id"]
+
+
+@pytest.mark.parametrize("quote", ["    retry(job)", "        backoff(job)", "    retry(job)\n\nCall"])
+def test_an_indented_quote_keeps_its_indent(code_doc, quote):
+    out = tools.comment(caller("bencha"), doc=code_doc, quote=quote, body="Why?")
+    assert "refused" not in out, out
+    assert anchored(code_doc, threads(code_doc)[0]["id"])["exact"] == quote
+
+
+@pytest.mark.parametrize("copied", ["Then stop.\n", "Then stop.\r\n", "\nThen stop.\n\n"])
+def test_newlines_around_a_copied_quote_are_not_part_of_it(code_doc, copied):
+    out = tools.comment(caller("bencha"), doc=code_doc, quote=copied, body="Why?")
+    assert "refused" not in out, out
+    assert anchored(code_doc, threads(code_doc)[0]["id"])["exact"] == "Then stop."
+
+
+@pytest.mark.parametrize("ending", ["\n", "\r\n"])
+def test_an_indented_line_copied_with_its_newline_keeps_its_indent(code_doc, ending):
+    out = tools.comment(caller("bencha"), doc=code_doc, quote=f"        backoff(job){ending}", body="Why?")
+    assert "refused" not in out, out
+    assert anchored(code_doc, threads(code_doc)[0]["id"])["exact"] == "        backoff(job)"
+
+
+def test_stray_spaces_around_a_quote_that_is_not_indented_still_find_it(code_doc):
+    out = tools.comment(caller("bencha"), doc=code_doc, quote="  Then stop.  ", body="Why?")
+    assert "refused" not in out, out
+    assert anchored(code_doc, threads(code_doc)[0]["id"])["exact"] == "Then stop."
+
+
+@pytest.mark.parametrize("blank", ["   ", " \n\t\n"])
+def test_a_quote_of_only_whitespace_is_an_error(code_doc, blank):
+    with pytest.raises(tools.ToolError):
+        tools.comment(caller("bencha"), doc=code_doc, quote=blank, body="Why?")
 
 
 def test_the_anchor_is_the_exact_range():
@@ -217,10 +269,58 @@ def test_a_bots_approve_wakes_the_editor_and_says_not_to_push(doc):
 
 
 def test_the_editors_own_action_wakes_nobody(doc):
+    """Past the tool, which refuses it: the CLI alone can still record an editor's own Action."""
     inbox, ws = watching("coder")
-    tools.act(caller("coder"), doc=doc, action="send-back")
+    r = server.run_cli(accounts.token_for("coder"), ["act", doc, "send-back"])
+    assert r.returncode == 0, r.stderr
     drain(ws)
     assert inbox.got == []
+
+
+def actions_on(doc_id):
+    return [e["payload"]["action"] for e in docs.doc_events(doc_id) if e["type"] == "action.taken"]
+
+
+@pytest.mark.parametrize("action", rules.REVIEW_ACTIONS)
+def test_the_editor_cannot_review_its_own_document(doc, action):
+    out = tools.act(caller("coder"), doc=doc, action=action)
+    assert out["refused"] is True and out["doc"] == doc
+    assert "annotary_act" in out["reason"] and "reviewer" in out["reason"]
+    assert actions_on(doc) == []  # nothing recorded
+
+
+def test_the_editor_is_refused_when_it_names_the_document_too(doc):
+    out = tools.act(caller("coder"), doc="Plan", action="approve")
+    assert out.get("refused") is True, out
+    assert actions_on(doc) == []
+
+
+def test_after_a_handoff_the_old_editor_can_review_and_the_new_one_cannot(doc):
+    tools.handoff(caller("coder"), doc=doc, to="bencha")
+    assert tools.act(caller("bencha"), doc=doc, action="approve")["refused"] is True
+    assert tools.act(caller("coder"), doc=doc, action="approve")["action"] == "approve"
+
+
+def test_a_person_can_still_act_after_the_editor_was_refused(doc):
+    inbox, ws = watching("coder")
+    tools.act(caller("coder"), doc=doc, action="send-back")
+    owner_cli("act", doc, "send-back")
+    drain(ws)
+    assert actions_on(doc) == ["send-back"] and [g[0] for g in inbox.got] == ["coder"]
+
+
+def test_the_editor_can_take_an_action_that_is_not_a_review(doc):
+    declared = server.api(server.owner_token(), "POST", f"/api/v1/docs/{doc}/versions", {
+        "name": "Plan", "md_hash": hashlib.sha256(PLAN.encode()).hexdigest(), "actions_available": [{"id": "ship"}]})
+    assert declared["already"] is True  # the same content: only the Document's Actions changed
+    assert tools.act(caller("coder"), doc=doc, action="ship")["action"] == "ship"
+    assert actions_on(doc) == ["ship"]
+
+
+def test_a_document_with_no_recorded_editor_can_be_reviewed_by_any_bot(doc):
+    state.update(lambda st: st["docs"].pop(doc), None)
+    assert tools.act(caller("coder"), doc=doc, action="approve")["action"] == "approve"
+    assert actions_on(doc) == ["approve"]
 
 
 def test_a_persons_send_back_still_wakes_the_editor(doc):
@@ -334,6 +434,10 @@ def test_the_tools_are_registered_like_the_others():
     description = got["annotary_comment"]["schema"]["description"]
     for rule in ("does not edit", "wakes nobody", "@mention"):
         assert rule in description
+
+
+def test_the_act_tool_says_the_editor_does_not_review_its_own_document():
+    assert "The editor cannot Send back or Approve its own Document" in registered()["annotary_act"]["schema"]["description"]
 
 
 def test_the_skill_tells_a_reviewer_it_comments_and_does_not_edit():

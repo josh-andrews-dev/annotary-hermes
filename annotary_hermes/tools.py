@@ -227,6 +227,13 @@ def _head_text(tok: str, doc: str, root: Path | None) -> tuple[dict, str]:
         return head, next(Path(out).glob("*.md")).read_bytes().decode("utf-8")
 
 
+def _quoted_passage(text: str, quote: str) -> str:
+    """What *quote* points at: newlines around it are never part of it, indentation is, and other
+    padding goes only when the quote is not in the text with it."""
+    exact = quote.strip("\r\n")
+    return exact if exact in text else quote.strip()
+
+
 def _find_quote(text: str, quote: str) -> tuple[str, str]:
     """The ``L:C-L:C`` anchor of *quote* in *text* (lines from 1, columns from 0 in code points,
     half-open), and "", or "" and why it cannot be anchored."""
@@ -264,8 +271,8 @@ def read(c: Caller, *, doc: str, root: Path | None = None) -> dict:
 def comment(c: Caller, *, doc: str, quote: str, body: str, version: int = 0, root: Path | None = None) -> dict:
     tok = _prepare(c, root)
     doc = _check_doc(doc)
-    quote = (quote or "").strip()
-    if not quote:
+    quote = quote or ""
+    if not quote.strip():
         raise ToolError("quote is empty: give the exact passage this comment is about")
     if not (body or "").strip():
         raise ToolError("body is empty")
@@ -278,7 +285,7 @@ def comment(c: Caller, *, doc: str, quote: str, body: str, version: int = 0, roo
     moved = "Read it again with annotary_read, then comment on what it says now."
     if version and int(version) != head_version:
         return refused(f"You read Version {version}, but this Document is now at Version {head_version}. {moved}")
-    anchor, why = _find_quote(text, quote)
+    anchor, why = _find_quote(text, _quoted_passage(text, quote))
     if not anchor:
         return refused(why)
     r = server.run_cli(tok, ["thread", "new", doc_id, anchor, "-m", "-", "--version", str(head_version), "--json"],
@@ -373,6 +380,11 @@ def act(c: Caller, *, doc: str, action: str, root: Path | None = None) -> dict:
     doc = _check_doc(doc)
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,40}", action or ""):
         raise ToolError("action must be an Action id such as approve or send-back")
+    if action in rules.REVIEW_ACTIONS:
+        doc_id = docs.resolve_id(doc, tok, root)["id"]  # doc may be a Name; the record is by id
+        refusal = rules.review_refusal(profile=c.profile, editor=(docs.info(doc_id, root) or {}).get("editor"))
+        if refusal:
+            return {"refused": True, "reason": refusal, "doc": doc_id}
     return _cli_json(tok, ["act", doc, action], root)
 
 

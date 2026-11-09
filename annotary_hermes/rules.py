@@ -1,8 +1,10 @@
 """Annotary's review rule, enforced by the plugin (D5, D11). Pure functions: no I/O.
 
 - A plain Comment wakes nobody.
-- Send back or Approve wakes the Document's editor, to fix, push once and resolve, whether a person
-  or another Bot chose it. Never for the editor's own Action.
+- Send back or Approve wakes the Document's editor, whether a person or another Bot chose it. Never
+  for the editor's own Action. After Send back it fixes what you asked, pushes one new Version and
+  answers each Thread; after Approve it answers what's waiting and does not push.
+- The editor does not Send back or Approve its own Document: annotary_act refuses it.
 - An @mention wakes only the Bot it names, to answer that Thread, never to push.
 - Never for an agent's own Comment; a wake from one agent to another (an @mention or a Send back)
   happens at most AGENT_WAKES_PER_HOUR times per Document per hour.
@@ -81,6 +83,15 @@ def review_open(events: list[dict], *, managed: dict[str, str]) -> bool:
                 and (e.get("payload") or {}).get("action") in REVIEW_ACTIONS)
     last = max((i for i, e in enumerate(events) if is_boundary(e)), default=-1)
     return any(e.get("type") in COMMENT_TYPES and (e.get("by") or "") not in managed for e in events[last + 1:])
+
+
+def review_refusal(*, profile: str, editor: str | None) -> str | None:
+    """Why *profile* may not Send back or Approve this Document, else None."""
+    if editor and editor == profile:
+        return ("You are this Document's editor, and an author does not Send back or Approve its own work. "
+                "That is for a reviewer: another Bot through annotary_act, or the person in Annotary. "
+                "To have another Bot edit it instead, use annotary_handoff.")
+    return None
 
 
 def push_refusal(*, profile: str, editor: str | None, editor_handle: str | None, review_is_open: bool,

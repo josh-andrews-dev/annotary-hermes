@@ -140,3 +140,9 @@ is in the Annotary repo, `docs/plans/hermes-edition.md`.
 - **A Bot's Action does not end a person's review.** Its Send back still wakes the editor, but
   while a person has commented and not decided, the editor's push stays refused. Rejected letting a
   Bot end it, because that would let an agent overrule someone who is still reading.
+- **`annotary_act` refuses the editor's own Send back or Approve.** Chose to refuse in the tool;
+  rejected leaving it to the wake rule because the Action wakes nobody but is still recorded as an
+  author approving its own work. Other Actions, and a Document with no recorded editor, pass.
+- **A quote keeps its indentation, and loses only the newlines around it.** Chose to look for the
+  quote as given first and drop other padding only if that finds nothing; rejected stripping every
+  quote because an indented code line then matched too widely or anchored a narrower range.
