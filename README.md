@@ -59,7 +59,8 @@ handed to a Bot whose profile has Annotary off.
 - **The Annotary page**: the Document list, then the Document itself: Annotary's own page in a
   sandboxed frame (Annotary's embed mode), fed through this plugin's backend, so it
   works on native Desktop, Desktop over SSH and the Webapp on a phone. Above it, the Document's
-  editor and **Send back** / **Approve**. If the server cannot serve the frame (a development
+  editor and its last Action. **Send back** and **Approve** are always on screen: in the page's
+  header when the page is wide enough, and in the bar above it when it is not. If the server cannot serve the frame (a development
   build without embed mode), the page shows the rendered Document, open Threads with reply and
   resolve, and a comment box instead. Chats on Desktop show
   an inline card for each shared Document.
@@ -125,6 +126,10 @@ folder; `hermes plugins remove annotary` leaves it, so delete it by hand after r
 On a VPS, in Docker or on Hermes Cloud, where Desktop's Web Access switch cannot be used, turn the
 Webapp on in `config.yaml` (`webapp.enabled`, `webapp.public_url`, a sign-in provider);
 `hermes annotary doctor` prints the exact block.
+
+A sign-in link signs in only the tab that opened it, because Hermes keeps the grant in that tab's
+`sessionStorage`. So on a Webapp with only sign-in links, an Annotary link opened in a new tab lands
+on Hermes's sign-in screen.
 
 ## Development
 

@@ -158,3 +158,14 @@ is in the Annotary repo, `docs/plans/hermes-edition.md`.
   route, so a 404 means something is wrong, and staying silent would hide it.
 - **The avatar tests fail on a server without the route**, the way the embed tests do; rejected
   skipping, because a skip would let a bad pin pass.
+
+## 2026-11-09: one set of Action buttons
+
+- **The bar shows Send back and Approve only while the embedded page cannot.** The page folds its
+  own buttons into a panel below a frame width of 850 px, so the bar shows them there and hides them
+  at 850 px and above, deciding by the frame's width because Hermes's panes change it. Rejected
+  removing the bar's buttons outright, because a phone or a default Desktop window then needs a tap
+  on the title to reach the main action.
+- **Below 850 px the page's panel keeps its own buttons**, so a tap on the title shows a second set.
+  Nothing changes without the tap. Rejected an Annotary server change and release to remove them,
+  too late for the deadline.
