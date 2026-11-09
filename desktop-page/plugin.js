@@ -19,6 +19,8 @@ import { jsx, jsxs } from 'react/jsx-runtime'
 const ID = 'annotary'
 const PATH = '/annotary'
 const POLL_MS = 10000
+// Must match the frame width Annotary's embedded page folds its own Action buttons at (its `cd` container breakpoint).
+export const FRAME_ACTIONS_MIN_WIDTH = 850
 const DOC_RE = /^[a-z0-9]{1,16}$/
 
 let rest = null
@@ -220,28 +222,49 @@ function EmbedFrame({ doc, onNav }) {
 }
 
 function DocView({ doc, status, onChanged, onNav }) {
-  if (status?.embed) {
-    return jsxs('div', {
-      style: { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 },
-      children: [jsx(ReviewBar, { doc }), jsx(EmbedFrame, { doc, onNav })]
-    })
-  }
+  if (status?.embed) return jsx(EmbedDocView, { doc, onChanged, onNav })
   return jsx(NativeDocView, { doc, onChanged })
 }
 
-// Above the embedded page: the editor (D11) and the last Action. Send back and Approve are the
-// frame's own buttons, so buttons here would show them twice.
-export function ReviewBar({ doc }) {
+function EmbedDocView({ doc, onChanged, onNav }) {
+  const box = useRef(null)
+  const [frameWidth, setFrameWidth] = useState(null)
+  useEffect(() => {
+    const observer = new ResizeObserver(([entry]) => setFrameWidth(entry.contentRect.width))
+    if (box.current) observer.observe(box.current)
+    return () => observer.disconnect()
+  }, [])
+  return jsxs('div', {
+    ref: box,
+    style: { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 },
+    children: [jsx(ReviewBar, { doc, frameWidth, onChanged }), jsx(EmbedFrame, { doc, onNav })]
+  })
+}
+
+// Above the embedded page: the editor (D11), the last Action, and Send back / Approve only while
+// the frame is too narrow to show its own, so one set is on screen at every width.
+export function ReviewBar({ doc, frameWidth, onChanged }) {
   const [d, setD] = useState(null)
+  const [busy, setBusy] = useState(false)
   const load = useCallback(() => { rest(`/doc?id=${doc}`).then(setD).catch(() => {}) }, [doc])
-  useLive(load, [doc])
+  const refresh = useLive(load, [doc])
+  const act = async action => {
+    setBusy(true)
+    try { await rest('/act', { method: 'POST', body: { doc, action } }); refresh(); onChanged(); changed({ doc }) } catch (err) { host.notifyError(err, 'Could not take the Action') } finally { setBusy(false) }
+  }
   if (!d) return null
+  const frameFolded = frameWidth != null && frameWidth < FRAME_ACTIONS_MIN_WIDTH
   return jsxs('div', {
     'data-annotary-reviewbar': doc,
     style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, padding: '6px 12px', borderBottom: '1px solid var(--ui-stroke-secondary)' },
     children: [
       jsx('div', { 'data-annotary-editor': '', style: { fontSize: 12, ...muted }, children: `Editor: ${d.editor || 'none yet'}` }),
-      d.action && jsx('div', { style: { fontSize: 12, fontWeight: 600 }, children: `${d.action.label} by @${d.action.by}` })
+      d.action && jsx('div', { style: { fontSize: 12, fontWeight: 600 }, children: `${d.action.label} by @${d.action.by}` }),
+      jsx('div', { style: { flex: 1 } }),
+      ...(frameFolded ? d.actions || [] : []).map(a => jsx(Button, {
+        key: a.id, size: 'sm', disabled: busy, variant: a.intent === 'positive' ? 'default' : 'outline',
+        'data-annotary-action': a.id, onClick: () => act(a.id), children: a.label
+      }))
     ]
   })
 }
