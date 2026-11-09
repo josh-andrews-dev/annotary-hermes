@@ -5,6 +5,16 @@
       "where": "LICENSE-*",
       "category": "person",
       "reason": "The license names its copyright holder."
+    },
+    {
+      "where": "plugin.yaml",
+      "category": "person",
+      "reason": "author credit"
+    },
+    {
+      "where": "annotary_hermes/blobatar.py",
+      "category": "person",
+      "reason": "author credit"
     }
   ]
 }
