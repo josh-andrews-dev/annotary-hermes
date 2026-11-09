@@ -151,7 +151,8 @@ class Watcher:
             s.setdefault("wake_log", []).append(rec)
             s["wake_log"] = s["wake_log"][-100:]
         state.update(work, self.root)
-        log.info("annotary: %s %s for %s on %s (seq %s)", outcome, w.reason, self.profile, w.doc, w.seq)
+        log.info("annotary: %s: %s for %s on %s (seq %s)", rules.OUTCOME_TEXT.get(outcome, outcome), w.reason,
+                 self.profile, w.doc, w.seq)
         return rec
 
     def step(self, wait: int = POLL_WAIT) -> list[dict]:

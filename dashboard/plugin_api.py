@@ -4,7 +4,7 @@ The page reaches the private server only through these routes (they act as the o
 works from every surface: native Desktop, Desktop over SSH, the Webapp on a phone.
 
     GET  /status             server, wake-ups, whether the server has embed mode
-    GET  /docs               the Document list, with each Document's editor
+    GET  /documents          the Document list, with each Document's editor
     GET  /doc?id=ID          one Document: header, rendered HTML, open Threads, Actions, editor
     POST /act      {doc, action}
     POST /comment  {doc, text}               a Comment on the whole Document
@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
 import sys
 import urllib.error
@@ -31,8 +32,9 @@ _PLUGIN = Path(__file__).resolve().parents[1]
 if str(_PLUGIN) not in sys.path:
     sys.path.insert(0, str(_PLUGIN))
 
-from annotary_hermes import accounts, bridge, enablement, paths, server, state  # noqa: E402
+from annotary_hermes import accounts, bridge, desktop, enablement, paths, server, state  # noqa: E402
 
+log = logging.getLogger("annotary_hermes")
 router = APIRouter()
 DOC_ID = re.compile(r"^[a-z0-9]{1,16}$")
 THREAD_ID = re.compile(r"^t\d{1,6}$")
@@ -91,6 +93,10 @@ def _wake_on() -> bool:
 
 def _status() -> dict:
     server.ensure_running()
+    try:  # a page from before a plugin update calls this first, so one reload brings the new page
+        desktop.install_page()
+    except OSError as e:
+        log.warning("annotary: could not refresh the desktop page: %s", e)
     st = state.load()
     return {"ok": True, "server": server.health(), "embed": bridge.shell() is not None, "wake": _wake_on(),
             "owner": "@" + server.owner_handle(),
@@ -113,7 +119,7 @@ def _docs() -> dict:
                       **_editor_view(st, d["id"])} for d in rows]}
 
 
-@router.get("/docs")
+@router.get("/documents")  # not /docs: a non-default profile's plugin host would serve FastAPI's Swagger page there
 async def docs():
     return await asyncio.to_thread(_docs)
 

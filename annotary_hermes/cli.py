@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import sys
 
-from . import accounts, desktop, enablement, install, paths, server, state
+from . import accounts, desktop, enablement, install, paths, rules, server, state
 
 
 def _hermes() -> list[str]:
@@ -45,7 +46,9 @@ def status(_args=None) -> int:
     _print({"server": paths.server_url(), "running": bool(h and h.get("ok")), "health": h,
             "binary": install.installed(), "desktop_page": desktop.page_status(),
             "documents": len(st["docs"]), "members": len(st["members"]),
-            "wake": wake_state(), "recent_wakes": st.get("wake_log", [])[-5:]})
+            "wake": wake_state(),
+            "recent_wakes": [{**r, "result": rules.OUTCOME_TEXT.get(r.get("outcome"), r.get("outcome"))}
+                             for r in st.get("wake_log", [])[-5:]]})
     return 0
 
 
@@ -190,12 +193,36 @@ def doctor(_args=None) -> int:
         check(plugin in (enablement.ON, enablement.DECLINED), what[plugin], enablement.FIX)
     w = _run_hermes(["webapp", "--status"])
     print("Webapp:\n  " + "\n  ".join((w.stdout or w.stderr).strip().splitlines()[:8]))
-    print("  Where Web Access cannot be switched on (a VPS, Docker, Hermes Cloud), set in config.yaml:\n"
-          "    webapp:\n      enabled: true\n      public_url: https://<the HTTPS address you serve it at>\n"
-          "  and a sign-in provider (see Hermes's docker.md, \"Behind a tunnel or reverse proxy\").\n"
-          "  Annotary links then open the Annotary page at <public_url>/#/annotary?doc=<id>.")
+    for line in _webapp_notes(w.stdout or w.stderr):
+        print(line)
     print(f"Wake-ups: {wake_state()}  (hermes annotary wake on|off)")
     return 1 if problems else 0
+
+
+def _webapp_settings() -> tuple[bool, str]:
+    """(turned on, public address), read as Hermes reads them; "" for an address it would not use."""
+    root = paths.hermes_root()
+    try:
+        from gateway.webapp_listener import webapp_settings
+    except ImportError:  # not running inside Hermes
+        conf = accounts._read_profile_yaml(root / "config.yaml").get("webapp")
+        conf = conf if isinstance(conf, dict) else {}
+        public = conf.get("public_url")
+        valid = isinstance(public, str) and re.fullmatch(r"https?://[^\s/?#@]+(/[^\s?#@]*)?", public)
+        return conf.get("enabled") is True, public.rstrip("/") if valid else ""
+    settings = webapp_settings(root)
+    return settings.enabled is True, settings.public_url or ""
+
+
+def _webapp_notes(status_text: str) -> list[str]:
+    """The public address when there is one, and the setup advice only for a Webapp not set up."""
+    enabled, public = _webapp_settings()
+    if enabled or "Serving at" in status_text:
+        return [f"  Annotary links open the Annotary page at {public}/#/annotary?doc=<id>."] if public else []
+    return ["  Where Web Access cannot be switched on (a VPS, Docker, Hermes Cloud), set in config.yaml:",
+            "    webapp:\n      enabled: true\n      public_url: https://<the HTTPS address you serve it at>",
+            "  and a sign-in provider (see Hermes's docker.md, \"Behind a tunnel or reverse proxy\").",
+            "  Annotary links then open the Annotary page at <public_url>/#/annotary?doc=<id>."]
 
 
 def stop(_args=None) -> int:

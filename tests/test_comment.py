@@ -6,6 +6,7 @@ All against a real `annotary serve` (the `hermes` fixture). coder writes; bencha
 import hashlib
 import importlib.util
 import json
+import logging
 import sys
 
 import pytest
@@ -328,6 +329,16 @@ def test_a_persons_send_back_still_wakes_the_editor(doc):
     owner_cli("act", doc, "send-back")
     drain(ws)
     assert [g[0] for g in inbox.got] == ["coder"]
+
+
+def test_the_log_says_a_wake_up_was_handed_over_not_that_a_turn_ran(doc, caplog):
+    inbox, ws = watching("coder")
+    tools.act(caller("default"), doc=doc, action="send-back")
+    with caplog.at_level(logging.INFO, logger=watcher.log.name):
+        recs = drain(ws)
+    assert [r["outcome"] for r in recs] == ["woke"]  # the stored value stays stable
+    line = next(m for m in caplog.messages if m.startswith("annotary:"))
+    assert "handed to Hermes" in line and "woke" not in line
 
 
 def test_the_demo_sequence_fits_under_the_cap(doc):
