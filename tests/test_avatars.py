@@ -280,7 +280,7 @@ def tokens(root):
 
 @pytest.fixture()
 def fake_api(hermes, monkeypatch):
-    accounts.reconcile()  # the Members exist; on a server with avatars this also uploaded
+    accounts.reconcile()  # the Members exist, and this also uploaded
     state.update(lambda st: [m.pop("avatar", None) for m in st["members"].values()])
     api = FakeApi()
     monkeypatch.setattr(server, "api", api)
@@ -346,11 +346,17 @@ def test_a_face_that_cannot_be_rendered_stops_only_that_bot(hermes, fake_api, mo
     assert len(puts(fake_api)) == 2
 
 
-def test_a_server_without_avatars_is_left_alone(hermes, fake_api):
-    fake_api.fail.update({t: http_error(404, "not found") for t in tokens(hermes).values()})
+def test_a_server_without_the_route_is_reported_once_and_tried_again(hermes, fake_api):
+    all_tokens = tokens(hermes).values()
+    fake_api.fail.update({t: http_error(404, "not found") for t in all_tokens})
+    first = avatars.sync()
+    assert set(first) == set(tokens(hermes)) and all(v == "avatar not set: not found" for v in first.values())
+    assert avatars.sync() == {}  # the same reason again says nothing
+    assert len(puts(fake_api)) == 2 * len(all_tokens)  # every Bot, both passes: one 404 stops nobody else
+    assert not any("avatar" in m for m in state.load()["members"].values())
+    fake_api.fail.clear()
     assert avatars.sync() == {}
-    assert len(fake_api.calls) == 1
-    assert not any("avatar" in m or "avatar_error" in m for m in state.load()["members"].values())
+    assert all("avatar" in m and "avatar_error" not in m for m in state.load()["members"].values())
 
 
 def test_a_face_that_goes_away_is_cleared_once(hermes, fake_api):
@@ -569,22 +575,20 @@ def test_the_blobatar_port_has_no_invisible_characters_and_still_trims_them():
     assert blobatar._js_trim("\x1cx") == "\x1cx"  # Python's strip() would take it; JavaScript keeps it
 
 
-def server_has_avatars() -> bool:
-    binary = os.environ.get(install.DEV_BINARY_ENV)
-    if not binary:
-        return False  # the pinned v0.4.1 has no avatars: remove this gate when v0.5.0 is pinned
-    return subprocess.run([binary, "avatar", "--help"], capture_output=True).returncode == 0
-
-
-needs_avatars = pytest.mark.skipif(not server_has_avatars(), reason="needs a server with Member avatars")
+def needs_avatars():
+    """An empty upload changes nothing: any answer but 404 means the route is there."""
+    try:
+        server.api(server.owner_token(), "PUT", "/api/v1/me/avatar", {})
+    except server.ServerError as e:
+        assert getattr(e, "status", None) != 404, "the pinned Annotary must have Member avatars"
 
 
 def member(handle):
     return next(m for m in server.api(server.owner_token(), "GET", "/api/v1/members")["members"] if m["handle"] == handle)
 
 
-@needs_avatars
 def test_the_real_server_takes_every_kind_of_face(hermes):
+    needs_avatars()
     accounts.reconcile()
     tok = accounts.token_for("coder")
     for shape in SHAPES:
@@ -597,8 +601,8 @@ def test_the_real_server_takes_every_kind_of_face(hermes):
     assert member("coder")["avatar"]["type"] == "image/svg+xml"
 
 
-@needs_avatars
 def test_a_reconcile_puts_each_face_on_the_real_server_and_follows_a_change(hermes):
+    needs_avatars()
     assert "avatar" not in accounts.reconcile()["coder"]  # a success says nothing
     first = member("coder")["avatar"]
     assert first["static_type"] == "image/png"

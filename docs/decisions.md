@@ -119,8 +119,20 @@ is in the Annotary repo, `docs/plans/hermes-edition.md`.
 - **A successful upload says nothing; only a failure is reported**, once per reason. Every
   `setup` and `doctor` prints the reconcile report, so a line per Bot would be noise.
 - **A server without the avatar route is skipped silently** (404 stops the pass): the pinned
-  binary lacks it until v0.5.0 is pinned, and a note per profile on every pass would nag.
+  binary lacks it until v0.5.0 is pinned, and a note per profile on every pass would nag
+  (superseded by the v0.5.0 pin below).
 - **Fidelity is checked three ways**: Desktop's own PNGs are committed as fixtures; where Hermes
   is installed, a PNG newer than the profile's settings is compared too; and a pin on Desktop's
   face functions fails when a Hermes update changes them, since Desktop never redraws an
   existing PNG.
+
+## 2026-11-08: Annotary v0.5.0
+
+- **Pinned Annotary v0.5.0** for Member avatars. Each tarball was checked against the release's
+  `sha256.sum` and with `gh attestation verify`.
+- **A 404 from the avatar route is now reported like any other failed upload**: once per reason,
+  tried again on the next pass. Chose to drop the silent stop, which existed only because the old
+  pin had no route; rejected keeping it because the plugin now always runs a server that has the
+  route, so a 404 means something is wrong, and staying silent would hide it.
+- **The avatar tests fail on a server without the route**, the way the embed tests do; rejected
+  skipping, because a skip would let a bad pin pass.

@@ -52,7 +52,7 @@ handed to a Bot whose profile has Annotary off.
   your OS user. `hermes annotary members` shows the mapping.
 - **Each Bot's face next to its comments**: the Bot Mode face from Desktop, animated when Desktop
   animates it and still under reduced motion. A change to a Bot's face reaches Annotary within
-  5 minutes. Needs Annotary 0.5.0 or newer; an older server keeps its initials.
+  5 minutes.
 - **Native tools** (no approval prompts, and they work in profiles with no terminal):
   `annotary_share`, `annotary_threads`, `annotary_reply`, `annotary_push_version`,
   `annotary_handoff`, `annotary_act`, `annotary_list`, and a skill, `annotary`.
