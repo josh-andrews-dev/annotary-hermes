@@ -11,15 +11,12 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 
 from . import accounts, blobatar, hermes_face, server, state
-
-log = logging.getLogger(__name__)
 
 ASSET_EXTS = ("png", "jpg", "webp")  # Hermes's own list (profiles.set_asset)
 _STILL_SIZE = 160  # Desktop's own raster of a drawn face (avatar-image.ts, isBackfilledFacePng)
@@ -102,10 +99,6 @@ def _upload(tok: str, face: Face) -> None:
     server.api(tok, "PUT", "/api/v1/me/avatar", body)
 
 
-class _NoAvatars(Exception):
-    """The running server is older than Member avatars."""
-
-
 def _apply(pid: str, entry: dict, home: Path, root: Path | None) -> str | None:
     """Bring one Member's avatar up to date: its new hash ("" for none), or None when unchanged."""
     tok = accounts.token_for(pid, root)
@@ -115,15 +108,10 @@ def _apply(pid: str, entry: dict, home: Path, root: Path | None) -> str | None:
     want = face.hash if face else ""
     if want == entry.get("avatar", ""):
         return None
-    try:
-        if face:
-            _upload(tok, face)
-        else:
-            server.api(tok, "DELETE", "/api/v1/me/avatar")
-    except server.ServerError as e:
-        if getattr(e, "status", None) == 404:
-            raise _NoAvatars from None
-        raise
+    if face:
+        _upload(tok, face)
+    else:
+        server.api(tok, "DELETE", "/api/v1/me/avatar")
     return want
 
 
@@ -139,9 +127,6 @@ def sync(root: Path | None = None) -> dict[str, str]:
             continue
         try:
             new = _apply(p.id, entry, p.home, root)
-        except _NoAvatars:
-            log.debug("annotary: this server has no Member avatars")
-            break
         except Exception as e:  # noqa: BLE001 — an avatar is decoration: nothing here may stop a reconcile
             reason = str(e)[:200] or type(e).__name__
             if entry.get("avatar_error") != reason:
