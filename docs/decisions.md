@@ -1,7 +1,7 @@
 # Decisions
 
 Dated choices for annotary-hermes, as "chose X; rejected Y because Z". The design itself (D1–D11)
-is in the Annotary repo, `docs/plans/hermes-edition.md`.
+is in the maintainer's private plan.
 
 ## 2026-11-07: the first version (the basic loop)
 
