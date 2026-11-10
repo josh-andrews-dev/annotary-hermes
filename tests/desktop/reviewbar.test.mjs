@@ -3,7 +3,7 @@
 import { test, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { Button } from '@hermes/plugin-sdk'
-import { ReviewBar, FRAME_ACTIONS_MIN_WIDTH, watchFrameWidth } from '../../desktop/plugin.js'
+import { ReviewBar, FRAME_ACTIONS_MIN_WIDTH, listRowMeta, watchFrameWidth } from '../../desktop/plugin.js'
 
 afterEach(() => { delete globalThis.testState })
 
@@ -84,3 +84,10 @@ test('the bar says which Action was taken and by whom, in the past tense', () =>
   assert.ok(texts(render({ ...doc, action: { id: 'ship', label: 'Ship it', by: 'owner' } }, 1200)).includes('Ship it by @owner'))
   assert.ok(!texts(render(doc, 1200)).some(t => t.includes(' by @')))
 })
+
+test('the Document list says what happened to the head Version, in the past tense', () => {
+  const row = { version: 2, open: 0, editor: '@chief', action: { id: 'approve', label: 'Approve', by: 'josh' } }
+  assert.equal(listRowMeta(row), 'v2 · Approved by @josh · @chief')
+  assert.equal(listRowMeta({ ...row, open: 1, action: null }), 'v2 · 1 open · @chief')
+})
+

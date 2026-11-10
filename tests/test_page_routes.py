@@ -26,3 +26,20 @@ def test_the_page_only_calls_routes_the_backend_has():
     page = (ROOT / "desktop" / "plugin.js").read_text()
     called = set(re.findall(r"rest\(['`](/[a-z]+)", page))
     assert "/documents" in called and called <= {r.path for r in router().routes}
+
+
+def test_the_document_list_carries_the_head_versions_action(monkeypatch):
+    """The list says "Approved by @josh", so it needs the Action's id and who took it, not only its label."""
+    spec = importlib.util.spec_from_file_location("annotary_plugin_api_list", ROOT / "dashboard" / "plugin_api.py")
+    api = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(api)
+    rows = [{"id": "d1", "name": "a", "version": 2, "action": {"id": "approve", "label": "Approve", "by": "josh", "version": 2}},
+            {"id": "d2", "name": "b", "version": 3, "action": {"id": "send-back", "label": "Send back", "by": "josh", "version": 2}}]
+    monkeypatch.setattr(api, "_owner", lambda: "tok")
+    monkeypatch.setattr(api.server, "api", lambda *_a, **_k: {"docs": rows})
+    monkeypatch.setattr(api.state, "load", lambda: {})
+    monkeypatch.setattr(api, "_editor_view", lambda *_a: {})
+    docs = {d["id"]: d for d in api._docs()["docs"]}
+    assert docs["d1"]["action"] == {"id": "approve", "label": "Approve", "by": "josh"}
+    assert docs["d2"]["action"] is None  # an Action on an older Version is not the head's
+
