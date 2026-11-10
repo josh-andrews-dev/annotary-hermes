@@ -12,9 +12,9 @@ Tracker: this repo's GitHub Issues.
 ## Project rules
 
 The plugin gives Hermes Agent a private Annotary: a loopback `annotary serve` per Hermes install,
-an Annotary Member per profile, native tools, and an Annotary page in Desktop and the Webapp. Read
-the design (D1–D11), the Annotary repo's `docs/plans/hermes-edition.md` (its PR #30, not yet on
-`main`), before changing behavior.
+an Annotary Member per profile, native tools, and an Annotary page in Desktop and the Webapp. The
+design (D1–D11) is the maintainer's private plan; the rules below and `docs/decisions.md` carry
+what a change must keep.
 
 - Hermes plugin catalog rules bind every change (`plugin-catalog/README.md` in
   NousResearch/hermes-agent): no bundled binaries, no self-updating code, no core overrides,
