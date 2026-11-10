@@ -1,8 +1,5 @@
-"""Run `hermes plugins validate --install-deps` on the package, twice:
-
-1. the package as installed (agent half and backend; its page lives in desktop-page/, which
-   Hermes does not load as a package half on purpose);
-2. a copy with the page at desktop/plugin.js, so the validator's desktop-surface check reads it.
+"""Run `hermes plugins validate --install-deps` on the package as installed: the agent half, the
+backend and the desktop half (desktop/plugin.js, which the validator's desktop-surface check reads).
 
 Needs Hermes on the PATH; without it, says so and exits 0 (CI has no Hermes)."""
 
@@ -15,7 +12,7 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-PACKAGE = ["plugin.yaml", "__init__.py", "annotary_hermes", "dashboard", "desktop-page", "skills",
+PACKAGE = ["plugin.yaml", "__init__.py", "annotary_hermes", "dashboard", "desktop", "skills",
            "README.md", "LICENSE-MIT", "LICENSE-APACHE"]
 
 
@@ -44,9 +41,6 @@ def main() -> int:
         pkg.mkdir()
         copy_package(pkg)
         rc |= validate(pkg, "package")
-        (pkg / "desktop").mkdir()
-        shutil.copy2(pkg / "desktop-page" / "plugin.js", pkg / "desktop" / "plugin.js")
-        rc |= validate(pkg, "package with the page as desktop/plugin.js (desktop-surface lint)")
     return rc
 
 

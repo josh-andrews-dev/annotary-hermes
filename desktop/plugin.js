@@ -1,7 +1,7 @@
 // Annotary for Hermes: the desktop page (native Desktop and the Webapp, so phones too).
 //
-// Installed by the agent half as a standalone desktop plugin in <root>/desktop-plugins/annotary/
-// (no package marker), so it loads switched on in every browser. Plain ESM, loaded uncompiled:
+// The package's desktop half: Hermes copies it to <root>/desktop-plugins/annotary/ with its package
+// marker, so it and the agent half are one plugin. Plain ESM, loaded uncompiled:
 // imports only @hermes/plugin-sdk, react and react/jsx-runtime. Everything goes through ctx.rest
 // to the plugin's backend (/api/plugins/annotary/), which works from every surface.
 

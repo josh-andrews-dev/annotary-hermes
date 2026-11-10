@@ -12,7 +12,7 @@ import tempfile
 from pathlib import Path
 
 ALLOWED = {"@hermes/plugin-sdk", "react", "react/jsx-runtime"}
-PAGE = Path(__file__).resolve().parents[2] / "desktop-page" / "plugin.js"
+PAGE = Path(__file__).resolve().parents[2] / "desktop" / "plugin.js"
 
 
 def main() -> int:
@@ -36,7 +36,7 @@ def main() -> int:
             if r.returncode != 0:
                 problems.append("node --check: " + r.stderr.strip()[-500:])
     for p in problems:
-        print(f"desktop-page/plugin.js: {p}", file=sys.stderr)
+        print(f"desktop/plugin.js: {p}", file=sys.stderr)
     return 1 if problems else 0
 
 

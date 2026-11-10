@@ -98,23 +98,23 @@ Disclosed per the Hermes plugin catalog rules. Nothing leaves the machine except
 | One Token per profile | `<profile home>/plugin-data/annotary/token`, mode 600 | What that profile's tools act as. Never on a command line or in a log. |
 | Shared state | `$HERMES_ROOT/annotary/state.json` | Which Member each profile is, each Document's editor and sharing session. No secrets. |
 | Each Bot's face | The private server (from `profile.yaml` and `assets/avatar.*`) | Read from the profile and uploaded to the loopback server with that Bot's own Token, only when it changes. A photo is sent as it is. |
-| The page | `$HERMES_ROOT/desktop-plugins/annotary/plugin.js` | See below. |
+| The page | `$HERMES_ROOT/desktop-plugins/annotary/` | The package's desktop half (`desktop/plugin.js`), copied there by Hermes itself, as for any plugin with a page. |
 | Plugin links | `<profile home>/plugins/annotary` → the installed plugin | Only from `hermes annotary enable --all` or `enable <profile>`, which then run `hermes -p <profile> plugins enable annotary` (`--all` skips a profile where you turned the plugin off). Where a cloned profile holds its own copy of this plugin (its `plugin.yaml` names `annotary` and it has the `annotary_hermes` package), that copy is removed and replaced by the link; any other folder there is left alone. |
 
-**Why the page is a standalone desktop plugin.** Hermes loads a package's own `desktop/` half
-switched off in each new browser, and in Safari on Hermes 0.23 the Capabilities page that switches
-it on fails, so on a phone you could never turn the page on. A desktop plugin folder without
-Hermes's package marker loads switched on everywhere. So this package keeps its page in
-`desktop-page/`, which Hermes does not load as a package half, and its setup step (first use,
-`hermes annotary enable --all` and `hermes annotary doctor`) copies it to
-`$HERMES_ROOT/desktop-plugins/annotary/` with no marker. Hermes never pairs, adopts or prunes that
-folder; `hermes plugins remove annotary` leaves it, so delete it by hand after removing the plugin.
+**Turning the page on in a browser.** Hermes starts a plugin's page switched off in each new
+browser, so in the Webapp turn on **Annotary** once in Capabilities → Plugins. Native Desktop turns
+it on when the plugin is installed. On Hermes 0.23 the Capabilities page fails in Safari, and every
+iPhone browser uses Safari's engine, so on an iPhone the page cannot be turned on until Hermes fixes
+that; the tools and chat cards still work there.
+
+An earlier version of this plugin copied its page in by hand with no package marker; its setup step
+now removes that copy, so Hermes can put the plugin's own page in its place.
 
 ## Commands
 
 | Command | What it does |
 |---|---|
-| `hermes annotary setup` | Install the binary, start the server, put the page in place, sync Members |
+| `hermes annotary setup` | Install the binary, start the server, sync Members |
 | `hermes annotary status` | Server, page, Members and recent wake-ups, as JSON |
 | `hermes annotary members` | Which Member each profile is |
 | `hermes annotary enable --all` | Tools on in every profile you have not turned off (a profile made later needs it again) |

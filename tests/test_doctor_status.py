@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+import shutil
 import subprocess
 import sys
 import time
@@ -83,30 +84,48 @@ def test_hermes_own_reader_wins_when_it_is_there(webapp, capsys, monkeypatch):
     assert ADVICE not in out and "https://hermes.example.test/#/annotary?doc=<id>" in out
 
 
-def test_a_stale_page_is_refreshed_from_the_page_status_call(hermes):
-    spec = importlib.util.spec_from_file_location("annotary_dashboard_page_heal", ROOT / "dashboard" / "plugin_api.py")
+def _dashboard(name):
+    spec = importlib.util.spec_from_file_location(name, ROOT / "dashboard" / "plugin_api.py")
     api = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(api)
-    page = paths.desktop_page_target() / "plugin.js"
-    page.parent.mkdir(parents=True, exist_ok=True)
-    page.write_text("// an older copy of the page\n")
-    assert not desktop.page_status()["current"]
-    api._status()
-    assert desktop.page_status()["current"]
-    stamp = page.stat().st_mtime_ns
-    api._status()
-    assert page.stat().st_mtime_ns == stamp  # nothing rewritten when it is already current
+    return api
 
 
-def test_a_page_that_cannot_be_refreshed_does_not_stop_the_status_call(hermes, monkeypatch, caplog):
-    spec = importlib.util.spec_from_file_location("annotary_dashboard_page_err", ROOT / "dashboard" / "plugin_api.py")
-    api = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(api)
+def _page_folder(js: str, marker: bool):
+    target = paths.desktop_page_target()
+    target.mkdir(parents=True, exist_ok=True)
+    (target / "plugin.js").write_text(js)
+    if marker:
+        (target / desktop.MARKER).write_text('{"packageName": "annotary"}')
+    return target
+
+
+def test_an_earlier_versions_standalone_page_is_removed_from_the_page_status_call(hermes):
+    """Hermes never publishes the package's half over a marker-less folder, so the old copy goes."""
+    target = _page_folder("const ID = 'annotary'\n// an earlier version's hand-copied page\n", marker=False)
+    assert desktop.page_status()["standalone_copy"]
+    _dashboard("annotary_dashboard_page_retire")._status()
+    assert not target.exists()
+
+
+def test_the_published_half_and_other_folders_are_left_alone(hermes):
+    api = _dashboard("annotary_dashboard_page_keep")
+    target = _page_folder("const ID = 'annotary'\n", marker=True)
+    api._status()
+    assert (target / "plugin.js").is_file() and desktop.page_status()["paired"]
+    shutil.rmtree(target)
+    target = _page_folder("// someone else's plugin in this folder\n", marker=False)
+    api._status()
+    assert (target / "plugin.js").is_file()
+
+
+def test_a_page_that_cannot_be_removed_does_not_stop_the_status_call(hermes, monkeypatch, caplog):
+    api = _dashboard("annotary_dashboard_page_err")
     def refuse(*_a, **_k):
         raise OSError("read-only")
-    monkeypatch.setattr(desktop, "install_page", refuse)
+    monkeypatch.setattr(desktop, "retire_standalone_page", refuse)
     assert api._status()["ok"] is True
-    assert "could not refresh the desktop page" in caplog.text
+    assert "could not remove the old standalone desktop page" in caplog.text
 
 
 def test_status_does_not_claim_a_turn_ran(hermes, capsys):

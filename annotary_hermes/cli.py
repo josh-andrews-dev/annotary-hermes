@@ -27,14 +27,14 @@ def _print(obj) -> None:
 
 
 def setup(_args=None) -> int:
-    """Install the binary, set up and start the server, put the page in place, reconcile."""
+    """Install the binary, set up and start the server, reconcile."""
     r = server.ensure_running()
-    page = desktop.install_page()
+    retired = desktop.retire_standalone_page()
     report = accounts.reconcile()
     print(f"Annotary server: {r['outcome']} at {paths.server_url()} (data in {paths.data_dir()})")
-    print(f"Desktop page: {'updated' if page['changed'] else 'current'} at {page['path']}")
-    if page.get("removed_marker"):
-        print(f"  removed a package marker someone wrote there: {page['removed_marker']}")
+    print("Desktop page: part of this plugin; Hermes puts it in place when Desktop or the Webapp loads plugins")
+    if retired:
+        print(f"  removed an earlier version's standalone copy at {paths.desktop_page_target()}")
     for pid, what in report.items():
         print(f"  {pid}: {what}")
     return 0
@@ -167,12 +167,18 @@ def doctor(_args=None) -> int:
         check(True, f"server answers at {paths.server_url()}")
     except Exception as e:  # noqa: BLE001
         check(False, f"server: {e}", "hermes annotary logs")
+    if desktop.retire_standalone_page():
+        print("     removed an earlier version's standalone copy of the page")
     page = desktop.page_status()
-    if not page["ok"]:
-        fixed = desktop.install_page()
-        print(f"     repaired the desktop page (removed marker: {fixed.get('removed_marker')})")
-        page = desktop.page_status()
-    check(page["ok"], f"desktop page at {page['path']} (standalone, no package marker)")
+    if page["ok"]:
+        check(True, f"desktop page at {page['path']} (published by Hermes with this plugin)")
+    elif not page["present"]:
+        print("note desktop page not published yet: Hermes copies it when Desktop or the Webapp next loads plugins")
+    elif page["paired"]:
+        print("note desktop page is an older copy: reload Desktop or the Webapp and Hermes refreshes it")
+    else:
+        check(False, f"desktop page folder {page['path']} is not this plugin's (no package marker)",
+              "move that folder away, then reload Desktop or the Webapp")
     try:
         report = accounts.reconcile()
         st = state.load()

@@ -1,7 +1,7 @@
 // The page follows the frame's own navigation (embed protocol `annotary-nav`).
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { applyNav } from '../../desktop-page/plugin.js'
+import { applyNav } from '../../desktop/plugin.js'
 
 function run(path, current) {
   const calls = { set: [], toList: 0 }

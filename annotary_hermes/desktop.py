@@ -1,66 +1,62 @@
-"""Put the Annotary page in place as a standalone desktop plugin.
+"""The Annotary page is this package's desktop half, ``desktop/plugin.js``.
 
-Hermes loads a package's desktop half (``desktop/plugin.js``, copied with a ``.hermes-package.json``
-marker) switched off in each new browser, and the Capabilities page that switches it on fails in
-Safari on Hermes 0.23. A desktop plugin folder with no marker loads switched on everywhere. So the
-package ships its page as ``desktop-page/plugin.js``, a name Hermes's own half-copier never reads
-(it looks only at ``plugin.js`` and ``desktop/plugin.js``), and this module copies it to
-``<root>/desktop-plugins/annotary/`` with no marker. Hermes then never pairs, adopts or prunes it.
+Hermes publishes it to ``<root>/desktop-plugins/annotary/`` with its ``.hermes-package.json`` marker
+(Electron in native Desktop, the Webapp's routes on the host), so the page and the agent half are one
+plugin. Earlier versions copied the page there themselves with no marker. Hermes treats a marker-less
+folder as a plugin the user put there and never publishes the half over it, so that copy is removed.
 """
 
 from __future__ import annotations
 
 import json
-import os
 import shutil
-import tempfile
 from pathlib import Path
 
 from . import paths
 
 MARKER = ".hermes-package.json"
+#: Every page this plugin ever copied in declares this; a folder without it is not ours to remove.
+LEGACY_SIGNATURE = "const ID = 'annotary'"
 
 
 def source() -> Path:
-    return paths.package_dir() / "desktop-page" / "plugin.js"
+    return paths.package_dir() / "desktop" / "plugin.js"
+
+
+def _marker(target: Path):
+    try:
+        return json.loads((target / MARKER).read_text())
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError):
+        return "unreadable"
+
+
+def is_standalone_copy(target: Path) -> bool:
+    """The page an earlier version copied in by hand: a real folder, no package marker, our page."""
+    js = target / "plugin.js"
+    if target.is_symlink() or (target / MARKER).exists() or not js.is_file():
+        return False
+    try:
+        return LEGACY_SIGNATURE in js.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
 
 
 def page_status(root: Path | None = None) -> dict:
     target = paths.desktop_page_target(root)
     js = target / "plugin.js"
-    status: dict = {"path": str(target), "present": js.is_file()}
-    if (target / MARKER).exists():
-        try:
-            status["marker"] = json.loads((target / MARKER).read_text())
-        except (OSError, ValueError):
-            status["marker"] = "unreadable"
+    status: dict = {"path": str(target), "present": js.is_file(), "paired": _marker(target) is not None,
+                    "standalone_copy": is_standalone_copy(target)}
     status["current"] = js.is_file() and source().is_file() and js.read_bytes() == source().read_bytes()
-    status["ok"] = status["present"] and status["current"] and "marker" not in status
+    status["ok"] = status["present"] and status["paired"] and status["current"]
     return status
 
 
-def install_page(root: Path | None = None) -> dict:
-    """Copy the page in place (staged, then renamed), with no marker. Returns what it did; a marker
-    found in the folder is reported, since it means something adopted the folder as a package half."""
-    before = page_status(root)
-    if before["ok"]:
-        return {"changed": False, **before}
-    src = source()
-    if not src.is_file():
-        raise FileNotFoundError(f"the package has no desktop page at {src}")
+def retire_standalone_page(root: Path | None = None) -> bool:
+    """Remove an earlier version's hand-copied page, so Hermes can publish the package's half there."""
     target = paths.desktop_page_target(root)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    staging = Path(tempfile.mkdtemp(prefix=f".{target.name}.staging-", dir=target.parent))
-    try:
-        staged = staging / target.name
-        staged.mkdir()
-        shutil.copyfile(src, staged / "plugin.js")
-        os.chmod(staged / "plugin.js", 0o644)
-        if target.is_symlink():
-            target.unlink()
-        elif target.exists():
-            shutil.rmtree(target)
-        os.rename(staged, target)
-    finally:
-        shutil.rmtree(staging, ignore_errors=True)
-    return {"changed": True, "removed_marker": before.get("marker"), **page_status(root)}
+    if not is_standalone_copy(target):
+        return False
+    shutil.rmtree(target)
+    return True

@@ -28,8 +28,9 @@ what a change must keep.
 - Agent wake-ups follow Annotary's review rule (D5): never on a plain Comment; the editor
   wakes on Send back or Approve, a named Bot on an @mention, and a push is refused while a
   review is open. One editor per Document (D11).
-- The desktop page is `desktop-page/plugin.js`, copied with no package marker to
-  `$HERMES_ROOT/desktop-plugins/annotary/` so it loads switched on (Safari cannot switch a package
-  half on). Never add a `desktop/` half: Hermes would adopt that folder and mark it. Plain ESM
-  importing only `@hermes/plugin-sdk`, `react`, `react/jsx-runtime`; no build step.
+- The desktop page is the package's own desktop half, `desktop/plugin.js`: Hermes publishes it to
+  `$HERMES_ROOT/desktop-plugins/annotary/` with its package marker, so Hermes shows one plugin.
+  Never copy the page there by hand (the old standalone copy is only ever removed,
+  `desktop.retire_standalone_page`). Plain ESM importing only `@hermes/plugin-sdk`, `react`,
+  `react/jsx-runtime`; no build step.
 - The repo will be public: no host names, email addresses or home paths anywhere in it.

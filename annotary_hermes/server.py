@@ -210,8 +210,8 @@ def ensure_running(root: Path | None = None) -> dict:
                 raise ServerError(f"the server on port {paths.port()} runs an old binary and could not be "
                                   "stopped; run `hermes annotary stop`, then try again")
         setup_if_needed(root)
-        from . import desktop  # the setup step also puts the desktop page in place
-        desktop.install_page(root)
+        from . import desktop  # an earlier version's hand-copied page would block the package's half
+        desktop.retire_standalone_page(root)
         log = open(log_file(root), "a")
         proc = subprocess.Popen(
             [str(install.bin_path(root)), "serve", "--data-dir", str(paths.data_dir(root)),

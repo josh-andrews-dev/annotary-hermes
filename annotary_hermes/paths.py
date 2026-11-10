@@ -7,7 +7,7 @@ home), so every profile finds the same private server:
     <root>/annotary/data/               ANNOTARY_HOME of the private server (never ~/.annotary)
     <root>/annotary/secrets.json  0600  owner password and owner Token
     <root>/annotary/state.json          Members per profile, Document editors, wake bookkeeping
-    <root>/desktop-plugins/annotary/    the desktop page, a standalone desktop plugin (no marker)
+    <root>/desktop-plugins/annotary/    the desktop page, published by Hermes from desktop/ (marker)
     <profile home>/plugin-data/annotary/token  0600  that profile's Member Token
 """
 
