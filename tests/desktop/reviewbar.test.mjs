@@ -77,8 +77,10 @@ test('the bar keeps the editor line at every width', () => {
   }
 })
 
-test('the bar says which Action was taken and by whom', () => {
-  const bar = render({ ...doc, action: { label: 'Send back', by: 'owner' } }, 1200)
-  assert.ok(texts(bar).includes('Send back by @owner'))
+test('the bar says which Action was taken and by whom, in the past tense', () => {
+  assert.ok(texts(render({ ...doc, action: { id: 'approve', label: 'Approve', by: 'owner' } }, 1200)).includes('Approved by @owner'))
+  const bar = render({ ...doc, action: { id: 'send-back', label: 'Send back', by: 'owner' } }, 1200)
+  assert.ok(texts(bar).includes('Sent back by @owner'))
+  assert.ok(texts(render({ ...doc, action: { id: 'ship', label: 'Ship it', by: 'owner' } }, 1200)).includes('Ship it by @owner'))
   assert.ok(!texts(render(doc, 1200)).some(t => t.includes(' by @')))
 })

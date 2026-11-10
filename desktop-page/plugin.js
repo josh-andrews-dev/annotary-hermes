@@ -247,6 +247,13 @@ function EmbedDocView({ doc, onChanged, onNav }) {
 
 // Above the embedded page: the editor (D11), the last Action, and Send back / Approve only while
 // the frame is too narrow to show its own, so one set is on screen at every width.
+// The status line reports what happened, so the built-in Actions read in the past tense; a
+// Vault's own Action keeps its label.
+const TAKEN = { approve: 'Approved', 'send-back': 'Sent back' }
+export function actionTaken(a) {
+  return `${TAKEN[a.id] || a.label} by @${a.by}`
+}
+
 export function ReviewBar({ doc, frameWidth, onChanged }) {
   const [d, setD] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -263,7 +270,7 @@ export function ReviewBar({ doc, frameWidth, onChanged }) {
     style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, padding: '6px 12px', borderBottom: '1px solid var(--ui-stroke-secondary)' },
     children: [
       jsx('div', { 'data-annotary-editor': '', style: { fontSize: 12, ...muted }, children: `Editor: ${d.editor || 'none yet'}` }),
-      d.action && jsx('div', { style: { fontSize: 12, fontWeight: 600 }, children: `${d.action.label} by @${d.action.by}` }),
+      d.action && jsx('div', { style: { fontSize: 12, fontWeight: 600 }, children: actionTaken(d.action) }),
       jsx('div', { style: { flex: 1 } }),
       ...(frameFolded ? d.actions || [] : []).map(a => jsx(Button, {
         key: a.id, size: 'sm', disabled: busy, variant: a.intent === 'positive' ? 'default' : 'outline',
@@ -302,7 +309,7 @@ function NativeDocView({ doc, onChanged }) {
           jsx('div', { style: { fontSize: 18, fontWeight: 600 }, children: d.name }),
           jsx('div', { style: muted, children: `v${d.version} by @${d.by}${d.message ? ` · ${d.message}` : ''}` }),
           jsx('div', { 'data-annotary-editor': '', style: muted, children: `Editor: ${d.editor || 'none yet'}` }),
-          d.action && jsx('div', { style: { fontWeight: 600 }, children: `${d.action.label} by @${d.action.by}` })
+          d.action && jsx('div', { style: { fontWeight: 600 }, children: actionTaken(d.action) })
         ]
       }),
       jsx('div', {
@@ -398,7 +405,7 @@ function AnnotaryCard({ attrs }) {
         style: { flex: 1, minWidth: 0 },
         children: [
           jsx('div', { style: { fontWeight: 600 }, children: d ? d.name : `Annotary ${doc}` }),
-          jsx('div', { style: { fontSize: 12, ...muted }, children: d ? [`v${d.version}`, `${d.threads.length} open`, d.action ? `${d.action.label} by @${d.action.by}` : null].filter(Boolean).join(' · ') : 'Loading…' })
+          jsx('div', { style: { fontSize: 12, ...muted }, children: d ? [`v${d.version}`, `${d.threads.length} open`, d.action ? actionTaken(d.action) : null].filter(Boolean).join(' · ') : 'Loading…' })
         ]
       }),
       jsx(Button, { size: 'sm', onClick: () => host.navigate(`${PATH}?doc=${doc}`), children: 'Open' })
