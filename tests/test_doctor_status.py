@@ -96,7 +96,8 @@ def _page_folder(js: str, marker: bool):
     target.mkdir(parents=True, exist_ok=True)
     (target / "plugin.js").write_text(js)
     if marker:
-        (target / desktop.MARKER).write_text('{"packageName": "annotary"}')
+        (target / desktop.MARKER).write_text(json.dumps(  # the shape Hermes's reconcile writes
+            {"package": "annotary", "source": "/hermes/plugins/annotary/desktop", "sourceMtimeMs": 1}))
     return target
 
 
@@ -114,9 +115,37 @@ def test_the_published_half_and_other_folders_are_left_alone(hermes):
     api._status()
     assert (target / "plugin.js").is_file() and desktop.page_status()["paired"]
     shutil.rmtree(target)
-    target = _page_folder("// someone else's plugin in this folder\n", marker=False)
+    foreign = "// someone else's plugin in this folder\n"
+    target = _page_folder(foreign, marker=False)
     api._status()
-    assert (target / "plugin.js").is_file()
+    assert (target / "plugin.js").read_text() == foreign
+    shutil.rmtree(target)
+    edited = "const ID = 'annotary'\n// a page kept and edited by hand\n"
+    target = _page_folder(edited, marker=False)
+    (target / "notes.md").write_text("mine\n")
+    api._status()
+    assert (target / "plugin.js").read_text() == edited and (target / "notes.md").is_file()
+
+
+def test_an_invalid_marker_does_not_count_as_paired(hermes):
+    """Hermes ignores a marker without package and source, and so must the status and cleanup."""
+    target = _page_folder("const ID = 'annotary'\n", marker=False)
+    (target / desktop.MARKER).write_text('{"packageName": "annotary"}')
+    assert not desktop.page_status()["paired"]
+    assert desktop.retire_standalone_page() and not target.exists()
+
+
+def test_a_copy_equal_to_the_half_is_left_for_hermes_to_adopt(hermes):
+    target = _page_folder(desktop.source().read_text(), marker=False)
+    assert not desktop.retire_standalone_page() and (target / "plugin.js").is_file()
+
+
+def test_a_copy_that_cannot_be_removed_is_reported_not_raised(hermes, monkeypatch):
+    target = _page_folder("const ID = 'annotary'\n", marker=False)
+    def refuse(*_a, **_k):
+        raise PermissionError("locked")
+    monkeypatch.setattr(desktop.shutil, "rmtree", refuse)
+    assert desktop.retire_standalone_page() is False and target.exists()
 
 
 def test_a_page_that_cannot_be_removed_does_not_stop_the_status_call(hermes, monkeypatch, caplog):

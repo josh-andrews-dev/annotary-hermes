@@ -181,7 +181,9 @@ is in the maintainer's private plan.
   on, so iPhones cannot use the page until Hermes fixes that.
 - **The old copy is removed, never rewritten.** Hermes leaves a marker-less folder alone as a plugin
   the user put there, so it would never publish the half over our old copy. Setup, the server's start
-  and the page's status call remove a marker-less `desktop-plugins/annotary/` whose `plugin.js`
-  declares `const ID = 'annotary'` (every page this plugin shipped does); any other folder there is
-  left alone and `doctor` reports it.
+  and the page's status call remove `desktop-plugins/annotary/` only in the shape the old installer
+  wrote: a real folder holding just `plugin.js`, declaring `const ID = 'annotary'` (every page this
+  plugin shipped does), with no marker Hermes accepts (a dict naming `package` and `source`, as its
+  `read_package_marker` requires), and not byte-equal to the current half (Hermes adopts that copy
+  itself). A failed removal is left for `doctor` to report; any other folder is left alone.
 
