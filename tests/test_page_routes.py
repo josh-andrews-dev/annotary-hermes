@@ -23,6 +23,6 @@ def test_no_route_is_shadowed_by_a_fastapi_built_in_page():
 
 
 def test_the_page_only_calls_routes_the_backend_has():
-    page = (ROOT / "desktop-page" / "plugin.js").read_text()
+    page = (ROOT / "desktop" / "plugin.js").read_text()
     called = set(re.findall(r"rest\(['`](/[a-z]+)", page))
     assert "/documents" in called and called <= {r.path for r in router().routes}

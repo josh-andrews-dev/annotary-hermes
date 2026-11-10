@@ -3,7 +3,7 @@
 import { test, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { Button } from '@hermes/plugin-sdk'
-import { ReviewBar, FRAME_ACTIONS_MIN_WIDTH, watchFrameWidth } from '../../desktop-page/plugin.js'
+import { ReviewBar, FRAME_ACTIONS_MIN_WIDTH, watchFrameWidth } from '../../desktop/plugin.js'
 
 afterEach(() => { delete globalThis.testState })
 

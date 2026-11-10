@@ -93,10 +93,10 @@ def _wake_on() -> bool:
 
 def _status() -> dict:
     server.ensure_running()
-    try:  # a page from before a plugin update calls this first, so one reload brings the new page
-        desktop.install_page()
+    try:  # an earlier version's standalone page calls this first; once it is gone, a reload loads the half
+        desktop.retire_standalone_page()
     except OSError as e:
-        log.warning("annotary: could not refresh the desktop page: %s", e)
+        log.warning("annotary: could not remove the old standalone desktop page: %s", e)
     st = state.load()
     return {"ok": True, "server": server.health(), "embed": bridge.shell() is not None, "wake": _wake_on(),
             "owner": "@" + server.owner_handle(),

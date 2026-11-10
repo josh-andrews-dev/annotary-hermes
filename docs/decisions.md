@@ -169,3 +169,21 @@ is in the maintainer's private plan.
 - **Below 850 px the page's panel keeps its own buttons**, so a tap on the title shows a second set.
   Nothing changes without the tap. Rejected an Annotary server change and release to remove them,
   too late for the deadline.
+
+## 2026-11-10: one plugin, with the page as its desktop half
+
+- **The page is the package's `desktop/` half again.** Chose one plugin: Hermes publishes
+  `desktop/plugin.js` with its package marker, joins it to the agent half and shows one
+  Capabilities card, titled with the page's name, "Annotary". Rejected keeping the standalone copy
+  (2026-11-07), because Hermes then showed two cards, a blank "Annotary" page and a lowercase
+  "annotary" agent half, that turn on and off separately. The cost: in each new browser the page
+  starts switched off, and on Hermes 0.23 Safari's Capabilities page fails before it can be turned
+  on, so iPhones cannot use the page until Hermes fixes that.
+- **The old copy is removed, never rewritten.** Hermes leaves a marker-less folder alone as a plugin
+  the user put there, so it would never publish the half over our old copy. Setup, the server's start
+  and the page's status call remove `desktop-plugins/annotary/` only in the shape the old installer
+  wrote: a real folder holding just `plugin.js`, declaring `const ID = 'annotary'` (every page this
+  plugin shipped does), with no marker Hermes accepts (a dict naming `package` and `source`, as its
+  `read_package_marker` requires), and not byte-equal to the current half (Hermes adopts that copy
+  itself). A failed removal is left for `doctor` to report; any other folder is left alone.
+
