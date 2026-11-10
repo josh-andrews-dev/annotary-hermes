@@ -109,13 +109,19 @@ async def status():
     return await asyncio.to_thread(_status)
 
 
+def _current_action(d: dict) -> dict | None:
+    """The head Version's Action (id, label, by), so the page can say what happened, not the button's label."""
+    a = d.get("action") or {}
+    return {k: a.get(k) for k in ("id", "label", "by")} if a and a.get("version") == d["version"] else None
+
+
 def _docs() -> dict:
     tok = _owner()
     rows = server.api(tok, "GET", "/api/v1/docs").get("docs", [])
     st = state.load()
     return {"docs": [{"id": d["id"], "name": d["name"], "title": d.get("title") or d["name"], "version": d["version"],
                       "open": d.get("open_threads", 0), "updated": d.get("updated_at"),
-                      "action": (d.get("action") or {}).get("label") if (d.get("action") or {}).get("version") == d["version"] else None,
+                      "action": _current_action(d),
                       **_editor_view(st, d["id"])} for d in rows]}
 
 

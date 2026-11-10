@@ -254,6 +254,11 @@ export function actionTaken(a) {
   return `${TAKEN[a.id] || a.label} by @${a.by}`
 }
 
+/** The Document list's second line: Version, open Threads, the head Version's Action, editor. */
+export function listRowMeta(d) {
+  return [`v${d.version}`, d.open ? `${d.open} open` : null, d.action ? actionTaken(d.action) : null, d.editor].filter(Boolean).join(' · ')
+}
+
 export function ReviewBar({ doc, frameWidth, onChanged }) {
   const [d, setD] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -371,7 +376,7 @@ function AnnotaryPage() {
         style: { textAlign: 'left', padding: 8, borderRadius: 6, border: '1px solid ' + (d.id === doc ? 'var(--ui-accent)' : 'transparent'), background: 'transparent', color: 'inherit', cursor: 'pointer' },
         children: [
           jsx('div', { style: { fontWeight: 500 }, children: d.title }),
-          jsx('div', { style: { fontSize: 12, ...muted }, children: [`v${d.version}`, d.open ? `${d.open} open` : null, d.action, d.editor].filter(Boolean).join(' · ') })
+          jsx('div', { style: { fontSize: 12, ...muted }, children: listRowMeta(d) })
         ]
       }))
     ]
