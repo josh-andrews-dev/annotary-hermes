@@ -40,3 +40,11 @@ model `meituan/longcat-2.5:free`.
 
 The demo recording uses `deepseek/deepseek-v4.1-flash-1017` (provider `nous`). Switch every
 profile with `hermes -p <profile> config set model.default <model>` and back the same way.
+
+## A branch on a hosted Hermes
+
+To check a branch on a Hermes you reach only through its Webapp (Hermes Cloud), push it, then have that instance's
+agent run `hermes plugins install --force --ref <full 40-character commit SHA> <repo URL>`: the Webapp's Install from
+Git takes no ref, and `--ref` takes a full SHA only. The page's new `plugin.js` loads on the next Webapp reload, but the
+tools keep the old Python until the gateway restarts (the dashboard's System → Restart Gateway). To see the page as a
+new browser does, remove `hermes.desktop.pluginDecisions.v2` from the tab's localStorage.
