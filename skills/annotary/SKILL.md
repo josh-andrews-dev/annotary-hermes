@@ -48,3 +48,7 @@ of the 3 wake-ups between Bots allowed per Document per hour; so does a Send bac
   in this chat that the review is over.
 - Quote Thread ids (`t3`) and text, not line numbers.
 - `annotary_list` shows every Document and any wake-ups you missed.
+- The card shows as plain text, or a link opens Hermes's home page? The Annotary page is off in
+  that browser (Hermes starts it off in each new one): tell the person to turn on Annotary in
+  Capabilities → Plugins. On an iPhone that page fails to load (Hermes 0.23), so say the Document
+  opens in Hermes Desktop or a computer's browser, and answer in chat until then.
