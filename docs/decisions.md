@@ -159,14 +159,6 @@ is in the maintainer's private plan.
 - **The avatar tests fail on a server without the route**, the way the embed tests do; rejected
   skipping, because a skip would let a bad pin pass.
 
-## 2026-11-11: Annotary v0.5.1
-
-- **Pinned Annotary v0.5.1** so a dollar amount stays text: its renderer no longer lets a `$`
-  followed by a digit close inline math (Pandoc's rule), in Documents and Comments, and Versions
-  rendered before re-render on read. Each tarball was checked against the release's `sha256.sum`
-  and with `gh attestation verify`. An installed plugin picks the new binary up on its next
-  call (`server.ensure_running` restarts a server that runs a stale pin).
-
 ## 2026-11-09: one set of Action buttons
 
 - **The bar shows Send back and Approve only while the embedded page cannot.** The page folds its
@@ -271,3 +263,10 @@ is in the maintainer's private plan.
   wake a Bot, and a mention wake says not to resolve the asker's Thread; rejected a lower cap,
   which would still spend the person's turns on chatter.
 
+## 2026-11-11: Annotary v0.5.1
+
+- **Pinned Annotary v0.5.1** so a dollar amount stays text: its renderer no longer lets a `$`
+  followed by a digit close inline math (Pandoc's rule), in Documents and Comments, and Versions
+  rendered before re-render on read. Each tarball was checked against the release's `sha256.sum`
+  and with `gh attestation verify`. An installed plugin picks the new binary up on its next
+  call (`server.ensure_running` restarts a server that runs a stale pin).
