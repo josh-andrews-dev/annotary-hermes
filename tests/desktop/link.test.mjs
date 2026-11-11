@@ -73,7 +73,7 @@ test('a link opened where the page is off says so and offers the switch', () => 
   assert.equal(notes.length, 1)
   assert.equal(notes[0].title, 'Annotary is off in this browser')
   notes[0].action.onClick()
-  assert.deepEqual(navs, ['/capabilities?tab=plugins'])
+  assert.deepEqual(navs, ['/capabilities?tab=plugins&plugin=annotary'])  // Hermes's deep link scrolls to the card
   assert.deepEqual(replaced, ['/#/'], 'the query leaves the address bar')
   assert.equal(takeLinked(win.sessionStorage, Date.now()), 'nveriy5x', 'kept for when the page is turned on')
 })

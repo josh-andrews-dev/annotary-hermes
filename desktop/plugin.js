@@ -105,8 +105,8 @@ export function bootLink(win, sdk, isRegistered, later = setTimeout) {
       sdk.notify({
         kind: 'warning',
         title: 'Annotary is off in this browser',
-        message: 'Hermes starts the Annotary page switched off in each new browser. Turn on Annotary in Capabilities → Plugins, and this Document opens.',
-        action: { label: 'Open Plugins', onClick: () => sdk.navigate('/capabilities?tab=plugins') }
+        message: 'Hermes starts the Annotary page switched off in each new browser. Turn on the Desktop switch on its card in Capabilities → Plugins, and this Document opens.',
+        action: { label: 'Open Plugins', onClick: () => sdk.navigate(`/capabilities?tab=plugins&plugin=${ID}`) }
       })
     } catch (err) { console.warn('[annotary] page is off in this browser; turn it on in Capabilities → Plugins') }
   }, OFF_AFTER_MS)

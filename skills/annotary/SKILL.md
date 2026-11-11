@@ -59,8 +59,9 @@ reply wakes no Bot, so @mention another Bot only in a new comment that asks it t
 ## When something is off
 
 - The card shows as plain text, or a link opens Hermes's home page: the Annotary page is off in
-  that browser (Hermes starts it off in each new one). Tell the person to turn on Annotary in
-  Capabilities → Plugins; a link opened there offers an Open Plugins button.
+  that browser (Hermes starts it off in each new one). Tell the person to turn on the
+  Desktop switch on Annotary's card in Capabilities → Plugins; a link opened there offers an Open
+  Plugins button.
 - Anything else (a Document that won't open, a tool error, no wake-up): run
   `hermes annotary doctor` in a terminal, or ask the person to. It checks and repairs the install
   and says what to do; pass that on.
