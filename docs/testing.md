@@ -48,3 +48,8 @@ agent run `hermes plugins install --force --ref <full 40-character commit SHA> <
 Git takes no ref, and `--ref` takes a full SHA only. The page's new `plugin.js` loads on the next Webapp reload, but the
 tools keep the old Python until the gateway restarts (the dashboard's System → Restart Gateway). To see the page as a
 new browser does, remove `hermes.desktop.pluginDecisions.v2` from the tab's localStorage.
+
+To act as a person on a fresh Hermes Cloud install, mind that the plugin's setup there runs as the OS user `hermes`,
+so the person starts as `@owner` (see `server.SERVICE_USERS`); the `hermes_cloud` test fixture sets up the same way.
+A Safari result from the iOS Simulator is not a result about iPhones: the Simulator's Capabilities page failed where a
+real iPhone, reaching it through a link's Open Plugins button, worked. Check phone claims on a device.
