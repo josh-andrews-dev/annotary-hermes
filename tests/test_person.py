@@ -221,3 +221,42 @@ def test_reconcile_waits_while_the_owner_is_being_switched(hermes_cloud):
         assert not done.wait(0.5)
     t.join(30)
     assert done.is_set()
+
+
+def _fail_password_once(monkeypatch):
+    real, calls = server.api, {"n": 0}
+
+    def flaky(tok, method, path, body=None, **kw):
+        if path == "/api/v1/settings/password" and not calls["n"]:
+            calls["n"] += 1
+            raise server.ServerError("boom")
+        return real(tok, method, path, body, **kw)
+    monkeypatch.setattr(server, "api", flaky)
+    try:
+        tools.set_name(caller("coder"), name="Rowan")
+        raise AssertionError("expected the first naming to fail")
+    except server.ServerError:
+        pass
+    assert server.naming_pending() == "rowan"
+
+
+def test_a_retry_under_another_name_drops_the_half_made_member(hermes_cloud, monkeypatch):
+    _fail_password_once(monkeypatch)
+    out = tools.set_name(caller("coder"), name="Alicia")
+    m = members()
+    assert out["handle"] == "alicia" and m["alicia"]["name"] == "Alicia"
+    assert m["rowan"]["disabled_at"] and m["owner"]["disabled_at"] and server.naming_pending() == ""
+
+
+def test_a_retry_under_a_variant_of_the_name_adopts_it_and_takes_the_new_spelling(hermes_cloud, monkeypatch):
+    _fail_password_once(monkeypatch)
+    out = tools.set_name(caller("coder"), name="ROWAN")
+    assert out["handle"] == "rowan" and members()["rowan"]["name"] == "ROWAN"
+
+
+def test_a_retry_that_keeps_the_handle_drops_the_half_made_member(hermes_cloud, monkeypatch):
+    _fail_password_once(monkeypatch)
+    out = tools.set_name(caller("coder"), name="王伟")
+    m = members()
+    assert out["handle"] == "owner" and m["rowan"]["disabled_at"] and not m["owner"]["disabled_at"]
+    assert server.naming_pending() == "" and server.owner_named()

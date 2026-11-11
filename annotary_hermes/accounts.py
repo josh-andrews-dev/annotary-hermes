@@ -320,16 +320,27 @@ def name_person(name: str, root: Path | None = None) -> dict:
     with state.locked("owner", root):
         old_tok, old = server.owner_token(root), server.owner_handle(root)
         want = _ascii_slug(name)
-        if server.owner_named(root) or not want or want == old:
+        remote = _members(old_tok)
+        pending = server.naming_pending(root)
+        live_pending = pending if pending and pending != old and pending in remote \
+            and not remote[pending].get("disabled_at") else ""
+        keep = server.owner_named(root) or not want or want == old
+        if live_pending and (keep or not _made_from(live_pending, want)):
+            # An earlier run under another name created it and stopped before the switch.
+            server.api(old_tok, "POST", f"/api/v1/members/{live_pending}/disable", {})
+            live_pending = ""
+        if pending and not live_pending:
+            server.update_secrets({"naming_pending": None}, root)
+        if keep:
             server.api(old_tok, "POST", "/api/v1/me/rename", {"name": name})
             server.update_secrets({"owner_named": True}, root)
             _retire_placeholders(old_tok, name, root)
             return {"handle": old, "name": name, "named": True, "changed_handle": False}
-        remote = _members(old_tok)
-        pending = server.naming_pending(root)
-        if pending and pending in remote and not remote[pending].get("disabled_at"):
-            handle = pending  # an earlier run created it and stopped before the switch
+        if live_pending:
+            handle = live_pending  # an earlier run created it and stopped before the switch
             tok = _mint(old_tok, handle, root)
+            if remote[handle].get("name") != name:
+                _rename(old_tok, handle, name, root)
         else:
             bots = {m["handle"] for m in state.load(root)["members"].values()}
             handle, n = want, 2
@@ -352,6 +363,17 @@ def name_person(name: str, root: Path | None = None) -> dict:
         return {"handle": handle, "name": name, "named": True, "changed_handle": True, "was": old}
 
 
+def _made_from(handle: str, want: str) -> bool:
+    """Whether *handle* is the one naming picks for *want*: itself, or itself with a suffix."""
+    return handle == want or re.fullmatch(re.escape(want) + r"-\d+", handle) is not None
+
+
+def _rename(tok: str, handle: str, name: str, root: Path | None) -> None:
+    r = server.run_cli(tok, ["member", "rename", handle, name], root=root)
+    if r.returncode != 0:
+        raise server.ServerError(f"member rename @{handle}: {r.stderr.strip()[-200:]}")
+
+
 def _retire_placeholders(tok: str, name: str, root: Path | None) -> None:
     """Rename every earlier placeholder of the person to *name* and disable it. Raises on a
     failure, so the caller reports it; the next naming finishes the job."""
@@ -361,8 +383,6 @@ def _retire_placeholders(tok: str, name: str, root: Path | None) -> None:
         if not m:
             continue
         if m.get("name") != name:
-            r = server.run_cli(tok, ["member", "rename", h, name], root=root)
-            if r.returncode != 0:
-                raise server.ServerError(f"member rename @{h}: {r.stderr.strip()[-200:]}")
+            _rename(tok, h, name, root)
         if not m.get("disabled_at"):
             server.api(tok, "POST", f"/api/v1/members/{h}/disable", {})
