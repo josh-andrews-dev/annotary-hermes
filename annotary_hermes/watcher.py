@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
+import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -21,6 +24,42 @@ POLL_WAIT = 25  # seconds a long-poll parks (Annotary caps it at 30)
 
 Inject = Callable[[str, str], bool]  # (text, session_key) -> accepted
 Broadcast = Callable[[str, dict], None]  # (event name, payload)
+
+
+#: Hermes's own route for a programmatic message to a profile's Bot: `chat -c TITLE --create-if-missing`
+#: runs one turn in that titled chat, creating it if needed (Bot Mode's agent-to-agent DMs use it too).
+BOT_CHAT = "Bot Chat"
+WAKE_FILE_TTL = 3600
+
+
+def _hermes_argv() -> list[str]:
+    exe = shutil.which("hermes")
+    return [exe] if exe else [sys.executable, "-m", "hermes_cli.main"]
+
+
+def wake_bot_chat(profile: str, text: str, root: Path | None = None, *, spawn=subprocess.Popen) -> bool:
+    """Wake *profile*'s Bot in its "Bot Chat" when Hermes has no live chat of it to inject into (a
+    Bot that never used Annotary). Only for a profile whose person allowed wake-ups: callers check."""
+    folder = paths.app_dir(root) / "wakes"
+    folder.mkdir(parents=True, exist_ok=True)
+    now = time.time()
+    for old in folder.glob("*.txt"):
+        try:
+            if now - old.stat().st_mtime > WAKE_FILE_TTL:
+                old.unlink()
+        except OSError:
+            pass
+    query = folder / f"{profile}-{int(now * 1000)}.txt"
+    query.write_text(text, encoding="utf-8")
+    try:
+        spawn([*_hermes_argv(), "-p", profile, "chat", "--in", str(Path.home()), "-c", BOT_CHAT,
+               "--create-if-missing", "-Q", "--query-file", str(query)],
+              stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+              start_new_session=True)
+    except OSError as e:
+        log.warning("annotary: could not wake %s in its Bot Chat: %s", profile, e)
+        return False
+    return True
 
 
 def head_seq(tok: str) -> int:

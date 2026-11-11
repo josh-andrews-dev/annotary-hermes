@@ -177,10 +177,19 @@ def _start_watcher(ctx) -> None:
 
     profile = ctx.profile_name  # captured here: a thread started from register() sees `default`
 
+    def allowed() -> bool:
+        try:  # the person's consent for this profile, read from its own config
+            return bool(ctx._gateway_injection_allowed())
+        except Exception:  # noqa: BLE001 — an older Hermes: no fallback
+            return False
+
     def inject(text: str, session_key: str) -> bool:
-        if session_key:
-            return bool(ctx.inject_message(text, session_key=session_key))
-        return bool(ctx.inject_message(text))
+        if session_key and ctx.inject_message(text, session_key=session_key):
+            return True
+        if not session_key and ctx.inject_message(text):
+            return True
+        # No live chat of this Bot (it never used Annotary, or that chat is gone): its Bot Chat.
+        return allowed() and watcher.wake_bot_chat(profile, text)
 
     def broadcast(name: str, payload: dict) -> None:
         if name == "notify" and ctx.get_config("notify_when_off", True) is False:

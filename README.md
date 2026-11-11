@@ -11,14 +11,41 @@ a Document keeps its Versions, Threads and replies.
 
 ## Install
 
+Needs Hermes 0.23.0 or newer, on macOS or Linux (WSL counts as Linux).
+
+### In the app (the Webapp, or Hermes Desktop on the same machine as Hermes)
+
+1. **Capabilities → Plugins → Install from Git**, with `https://github.com/josh-andrews-dev/annotary-hermes`.
+   Hermes marks it Unverified (it is not in the catalog yet) and installs it for the profile selected
+   at the top of the tab.
+2. **Every other profile** whose Bot should use Annotary: select that profile and choose **Install
+   here** on the Annotary card.
+3. **Restart the gateway** (System → Restart Gateway), so the agents get the tools.
+4. **The page.** In the browser you installed from, Hermes turns it on (the card's **Desktop** switch).
+   In any other browser it starts off: turn on that switch once there. An Annotary link opened where
+   it is off says so, with an **Open Plugins** button. Hermes Desktop turns it on by itself.
+5. **Ask an agent to share something**, e.g. "write a short plan and share it with me in Annotary".
+   Its first share starts with what is left to set up: your name (Annotary shows you as `@owner`
+   on Hermes Cloud until you give it), wake-ups (so Send back, Approve and @mentions wake the Bot),
+   and any profile without the plugin. Answer it in the chat.
+
+A chat open while you turned the page on shows its Annotary card as plain text until you reload it.
+
+### Hermes Desktop connected to a remote Hermes (Hermes Cloud, a VPS)
+
+Hermes Desktop draws plugin pages only from the Mac (or PC) it runs on, never from the remote
+Hermes. So install it in both places: on the remote Hermes as above (from the Webapp, or in Desktop
+while connected), and on this machine with **Install from Git** and the **Desktop** target checked,
+which puts the page here. The agents, tools and Documents stay on the remote Hermes.
+
+### From a terminal
+
 ```bash
 hermes plugins install josh-andrews-dev/annotary-hermes --enable
 hermes annotary enable --all        # tools in every profile
 hermes gateway restart --detach
-hermes annotary wake on             # optional: let Send back, Approve and @mentions wake the chat
+hermes annotary wake on             # optional: let Send back, Approve and @mentions wake the Bot
 ```
-
-Needs Hermes 0.23.0 or newer, on macOS or Linux (WSL counts as Linux).
 
 ### Profiles you make later
 
@@ -85,7 +112,8 @@ The plugin, not the model, decides when an agent wakes:
 Waking needs Hermes's `allow_gateway_injection` permission for this plugin, per profile. It is
 off until you turn it on (`hermes annotary wake on`, or Settings → Plugins); the agent's first share
 asks whether you want it. While it is off, Send back, Approve and @mentions show as notifications, and the agent
-sees them on its next Annotary tool call.
+sees them on its next Annotary tool call. A Bot that has no chat of its own on record (it never
+used Annotary yet) is woken in its "Bot Chat", which Hermes creates if needed.
 
 ## What it writes, and where
 

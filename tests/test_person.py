@@ -137,7 +137,8 @@ def test_a_profile_running_its_own_copy_is_a_setup_step_once(hermes_cloud):
     accounts.reconcile()
     here = hermes_cloud / "profiles" / "bencha" / "plugins" / "annotary"
     here.unlink()
-    shutil.copytree(hermes_cloud / "plugins" / "annotary", here)  # a cloned profile's own copy
+    shutil.copytree(hermes_cloud / "plugins" / "annotary", here)  # a cloned profile's own copy,
+    (here / "__init__.py").write_text("# an older version\n")  # since updated in default
     first = tools.share(caller("coder"), markdown="# Plan\n", name="Plan")["setup_first"]
     assert tools.PROFILES_SETUP.format(profiles="bencha") in first
     assert tools.PROFILES_SETUP.format(profiles="bencha") not in tools.share(
@@ -198,6 +199,7 @@ def test_a_profile_cloned_later_is_told_too(hermes_cloud):
     late = hermes_cloud / "profiles" / "late"
     (late / "config.yaml").write_text("model: test\nplugins:\n  enabled:\n    - annotary\n  disabled: []\n")
     shutil.copytree(hermes_cloud / "plugins" / "annotary", late / "plugins" / "annotary")
+    (late / "plugins" / "annotary" / "__init__.py").write_text("# an older version\n")
     accounts.reconcile()
     steps = tools.share(caller("coder"), markdown="# B\n", name="B").get("setup_first", [])
     assert tools.PROFILES_SETUP.format(profiles="late") in steps
@@ -276,3 +278,27 @@ def test_after_naming_old_comments_and_missed_wakeups_name_the_new_handle(hermes
     out = tools.set_name(caller("coder"), name="Rowan")  # every tool hands over missed wake-ups
     assert out["missed_wakeups"][0]["by"] == "rowan"
     assert docs.read_threads(server.owner_token(), doc)[0]["author"] == "rowan"
+
+
+def test_a_per_profile_install_of_the_same_plugin_is_on_not_a_stale_copy(hermes_cloud):
+    import shutil
+
+    from annotary_hermes import enablement
+    here = hermes_cloud / "profiles" / "bencha" / "plugins" / "annotary"
+    here.unlink()
+    shutil.copytree(hermes_cloud / "plugins" / "annotary", here)  # Hermes's "Install here"
+    assert enablement.plugin_state("bencha") == enablement.ON
+    (here / "plugin.yaml").write_text((here / "plugin.yaml").read_text() + "# changed\n")
+    assert enablement.plugin_state("bencha") == enablement.COPY
+
+
+def test_a_bot_with_no_chat_on_record_is_woken_in_its_bot_chat(hermes_cloud):
+    from annotary_hermes import watcher
+    calls = []
+    assert watcher.wake_bot_chat("bencha", "[Annotary] @rowan mentioned you", spawn=lambda argv, **kw: calls.append(argv))
+    (argv,) = calls
+    i = argv.index("-p")
+    assert argv[i:i + 3] == ["-p", "bencha", "chat"]
+    assert argv[argv.index("-c") + 1] == "Bot Chat" and "--create-if-missing" in argv and "-Q" in argv
+    query = argv[argv.index("--query-file") + 1]
+    assert open(query, encoding="utf-8").read() == "[Annotary] @rowan mentioned you"

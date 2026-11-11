@@ -136,9 +136,10 @@ NAME_SETUP = ("Annotary shows the person as @{handle} until they give a name. As
 WAKE_SETUP = ("Send back, Approve and @mentions on a Document wake this chat only once the person allows it; "
               "until then they show as notifications, and you see them on your next Annotary tool call. Ask "
               "whether they want that. If yes: `hermes annotary wake on` in a terminal (run it, or ask them to).")
-PROFILES_SETUP = ("Annotary is off, or an old copy that updates never reach, in profile(s) {profiles}: those "
-                  "Bots cannot edit or be woken. Have `hermes annotary enable --all` run in a terminal, then "
-                  "`hermes gateway restart --detach`.")
+PROFILES_SETUP = ("Annotary is not installed, or is an older copy, in profile(s) {profiles}: those Bots cannot "
+                  "edit or be woken. Fix: in Capabilities → Plugins, Install here (or update) Annotary for "
+                  "each, then restart the gateway (System → Restart Gateway); or in a terminal outside this "
+                  "chat, `hermes annotary enable --all`.")
 
 
 def _setup_steps(c: Caller, root: Path | None) -> list[str]:
