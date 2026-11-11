@@ -397,3 +397,24 @@ def test_a_bot_chat_turn_that_ends_unknown_becomes_a_notification(hermes_cloud):
             break
         time.sleep(0.02)
     assert failed == [1]
+
+
+def test_a_bot_chat_turn_never_inherits_yolo_or_the_gateways_approval_context(hermes_cloud, monkeypatch):
+    from annotary_hermes import watcher
+    for name in ("HERMES_YOLO_MODE", "HERMES_CRON_SESSION", "HERMES_EXEC_ASK", "HERMES_GATEWAY_SESSION",
+                 "HERMES_SESSION_KEY", "HERMES_SESSION_PLATFORM"):
+        monkeypatch.setenv(name, "1")
+    monkeypatch.setenv("HERMES_HOME", str(hermes_cloud))
+    seen = []
+
+    def spawn(argv, **kw):
+        seen.append(kw.get("env"))
+        turn = FakeTurn(code=0)
+        turn.release.set()
+        return turn
+    assert watcher.wake_bot_chat("bencha", "[Annotary] x", spawn=spawn)
+    env = seen[0]
+    assert env is not None, "the child must get an explicit env, not the gateway's"
+    assert not [k for k in env if k in ("HERMES_YOLO_MODE", "HERMES_CRON_SESSION", "HERMES_EXEC_ASK",
+                                        "HERMES_GATEWAY_SESSION") or k.startswith("HERMES_SESSION_")]
+    assert env["HERMES_HOME"] == str(hermes_cloud)  # everything else still passes through
