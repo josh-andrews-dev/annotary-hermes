@@ -79,13 +79,14 @@ def wake_bot_chat(profile: str, text: str, root: Path | None = None, *, spawn=su
         err = b""
         try:
             _, err = child.communicate()
-        except Exception:  # noqa: BLE001
-            pass
+            failed = bool(child.returncode)
+        except Exception as e:  # noqa: BLE001 — an unknown end counts as a failed turn
+            failed, err = True, str(e).encode()
         query.unlink(missing_ok=True)
         with _bot_chats_lock:
             if _bot_chats.get(profile) is child:
                 del _bot_chats[profile]
-        if child.returncode:
+        if failed:
             log.warning("annotary: %s's Bot Chat turn failed (exit %s): %s", profile, child.returncode,
                         (err or b"").decode("utf-8", "replace").strip()[-300:])
             if on_fail:

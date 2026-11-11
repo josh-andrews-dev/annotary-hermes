@@ -325,7 +325,10 @@ def _wake_with(inject_ok, consent, bot_chat_ok=True):
 def test_a_bot_with_no_live_chat_is_woken_in_its_bot_chat_only_with_consent(hermes_cloud):
     rec, calls = _wake_with(inject_ok=False, consent=lambda: True)
     assert rec["outcome"] == "woke" and len(calls) == 1 and calls[0][0] == "bencha"
-    assert "pending" not in state.load() or not state.load()["pending"].get("bencha")
+    assert not state.load()["pending"].get("bencha")
+    calls[0][2]()  # the turn failed later: the wake is kept for the Bot after all
+    assert state.load()["pending"]["bencha"][-1]["seq"] == 7
+    state.update(lambda st: st["pending"].pop("bencha"))
     rec, calls = _wake_with(inject_ok=False, consent=lambda: False)
     assert rec["outcome"] == "notified" and calls == []
     assert state.load()["pending"]["bencha"][-1]["seq"] == 7
