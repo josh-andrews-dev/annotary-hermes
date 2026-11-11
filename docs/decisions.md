@@ -255,6 +255,6 @@ is in the maintainer's private plan.
   reached it: Hermes refuses a key-less `inject_message` from a plugin's thread.
 - **A profile's own install is on when its code matches the default profile's.** Hermes's
   "Install here" puts a real folder in each profile, so only one whose plugin files differ (a clone
-  made before an update) is an older copy; rejected treating every non-link folder as stale, which
+  made before an update) is a different copy; rejected treating every non-link folder as stale, which
   told a Webapp-only person to run a terminal command.
 

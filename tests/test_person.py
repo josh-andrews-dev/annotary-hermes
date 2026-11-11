@@ -2,6 +2,7 @@
 annotary_set_name, against a real private `annotary serve`."""
 
 import json
+from pathlib import Path
 
 from annotary_hermes import accounts, server, state, tools
 
@@ -292,13 +293,87 @@ def test_a_per_profile_install_of_the_same_plugin_is_on_not_a_stale_copy(hermes_
     assert enablement.plugin_state("bencha") == enablement.COPY
 
 
-def test_a_bot_with_no_chat_on_record_is_woken_in_its_bot_chat(hermes_cloud):
-    from annotary_hermes import watcher
+class FakeTurn:
+    """Stands in for the `hermes chat` child: finishes when `release` is set."""
+
+    def __init__(self, code=0):
+        import threading
+        self.release, self.returncode, self.code = threading.Event(), None, code
+
+    def poll(self):
+        return self.returncode
+
+    def communicate(self):
+        self.release.wait(10)
+        self.returncode = self.code
+        return b"", b"boom" if self.code else b""
+
+
+def _wake_with(inject_ok, consent, bot_chat_ok=True):
+    from annotary_hermes import rules, watcher
     calls = []
-    assert watcher.wake_bot_chat("bencha", "[Annotary] @rowan mentioned you", spawn=lambda argv, **kw: calls.append(argv))
-    (argv,) = calls
+
+    def bot_chat(profile, text, root=None, *, on_fail=None):
+        calls.append((profile, text, on_fail))
+        return bot_chat_ok
+    w = watcher.Watcher("bencha", lambda text, key: inject_ok, allowed=consent, bot_chat=bot_chat)
+    rec = w.deliver(rules.Wake(profile="bencha", reason="mention", doc="d1", name="Plan", by="rowan",
+                               thread="t1", excerpt="@bencha hi", seq=7))
+    return rec, calls
+
+
+def test_a_bot_with_no_live_chat_is_woken_in_its_bot_chat_only_with_consent(hermes_cloud):
+    rec, calls = _wake_with(inject_ok=False, consent=lambda: True)
+    assert rec["outcome"] == "woke" and len(calls) == 1 and calls[0][0] == "bencha"
+    assert "pending" not in state.load() or not state.load()["pending"].get("bencha")
+    rec, calls = _wake_with(inject_ok=False, consent=lambda: False)
+    assert rec["outcome"] == "notified" and calls == []
+    assert state.load()["pending"]["bencha"][-1]["seq"] == 7
+
+
+def test_a_live_chat_or_unknown_consent_never_reaches_the_bot_chat(hermes_cloud):
+    def unknown():
+        raise AttributeError("an older Hermes")
+    assert _wake_with(inject_ok=True, consent=lambda: True)[1] == []
+    rec, calls = _wake_with(inject_ok=False, consent=unknown)
+    assert rec["outcome"] == "notified" and calls == []
+
+
+def test_a_bot_chat_turn_runs_one_at_a_time_and_a_failed_one_becomes_a_notification(hermes_cloud):
+    from annotary_hermes import watcher
+    turns, failed = [], []
+
+    def spawn(argv, **kw):
+        assert kw["start_new_session"] is True and kw["stdin"] is not None
+        turns.append((argv, FakeTurn(code=1)))
+        return turns[-1][1]
+    assert watcher.wake_bot_chat("bencha", "[Annotary] first", spawn=spawn, on_fail=lambda: failed.append(1))
+    argv, turn = turns[0]
     i = argv.index("-p")
-    assert argv[i:i + 3] == ["-p", "bencha", "chat"]
-    assert argv[argv.index("-c") + 1] == "Bot Chat" and "--create-if-missing" in argv and "-Q" in argv
-    query = argv[argv.index("--query-file") + 1]
-    assert open(query, encoding="utf-8").read() == "[Annotary] @rowan mentioned you"
+    assert argv[i:i + 3] == ["-p", "bencha", "chat"] and argv[argv.index("-c") + 1] == "Bot Chat"
+    assert "--create-if-missing" in argv and "-Q" in argv
+    query = Path(argv[argv.index("--query-file") + 1])
+    assert query.read_text(encoding="utf-8") == "[Annotary] first"
+    assert not watcher.wake_bot_chat("bencha", "[Annotary] second", spawn=spawn)  # busy: stays a notification
+    assert len(turns) == 1
+    turn.release.set()
+    for _ in range(100):
+        if failed:
+            break
+        import time
+        time.sleep(0.02)
+    assert failed == [1] and not query.exists()
+    assert watcher.wake_bot_chat("bencha", "[Annotary] third", spawn=spawn)  # free again
+    turns[-1][1].release.set()
+
+
+def test_a_sole_install_outside_default_is_on(hermes_cloud, monkeypatch):
+    import shutil
+
+    from annotary_hermes import enablement, paths
+    here = hermes_cloud / "profiles" / "bencha" / "plugins" / "annotary"
+    here.unlink()
+    shutil.copytree(hermes_cloud / "plugins" / "annotary", here)
+    shutil.rmtree(hermes_cloud / "plugins" / "annotary")  # nothing in default
+    monkeypatch.setattr(paths, "package_dir", lambda: here)
+    assert enablement.plugin_state("bencha") == enablement.ON
