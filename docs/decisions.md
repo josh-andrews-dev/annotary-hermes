@@ -257,4 +257,9 @@ is in the maintainer's private plan.
   "Install here" puts a real folder in each profile, so only one whose plugin files differ (a clone
   made before an update) is a different copy; rejected treating every non-link folder as stale, which
   told a Webapp-only person to run a terminal command.
+- **A Bot's reply wakes no Bot.** Two Bots acknowledging each other in a Thread ("agreed with
+  @hermes") woke each other until the cap, and the editor resolved the person's Thread meant for
+  the other Bot. Chose: only the person's comments and replies, a Bot's new comment, and a Send back
+  wake a Bot, and a mention wake says not to resolve the asker's Thread; rejected a lower cap,
+  which would still spend the person's turns on chatter.
 

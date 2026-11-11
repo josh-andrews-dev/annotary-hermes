@@ -45,8 +45,21 @@ def test_never_for_an_agents_own_comment():
 
 
 def test_agent_mention_of_agent_is_marked():
-    wakes = rules.decide(ev("thread.replied", "coder", mentions=["bencha"]), managed=MANAGED, editor="coder")
+    wakes = rules.decide(ev("thread.created", "coder", mentions=["bencha"]), managed=MANAGED, editor="coder")
     assert [(w.profile, w.by_agent) for w in wakes] == [("bencha", True)]
+
+
+def test_a_bots_reply_naming_another_bot_wakes_nobody():
+    """Two Bots acknowledging each other ("agreed with @coder") woke each other until the cap."""
+    assert rules.decide(ev("thread.replied", "coder", mentions=["bencha"]), managed=MANAGED, editor="coder") == []
+    person = rules.decide(ev("thread.replied", "josh", mentions=["bencha"]), managed=MANAGED, editor="coder")
+    assert [(w.profile, w.by_agent) for w in person] == [("bencha", False)]  # the person's reply still does
+
+
+def test_a_mention_wake_says_not_to_resolve_the_askers_thread():
+    from annotary_hermes import watcher
+    w = rules.Wake(profile="bencha", reason="mention", doc="d1", name="Plan", by="josh", thread="t1", excerpt="hi")
+    assert "Do not resolve the Thread" in watcher.message_for(w, me="bencha", digest="")
 
 
 def test_agent_to_agent_cap_is_three_per_hour():

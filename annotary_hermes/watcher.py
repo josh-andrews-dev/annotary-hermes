@@ -139,7 +139,8 @@ def message_for(w: rules.Wake, *, me: str, digest: str) -> str:
         return f"[Annotary] @{w.by} chose {label} on {title}.\n{digest}\n{todo}"
     return (f"[Annotary] @{w.by} mentioned you (@{me}) in Thread {w.thread} on {title}: \"{w.excerpt}\"\n"
             f"Read it with annotary_threads and answer in that Thread with annotary_reply: the answer, or a "
-            "question back if it is unclear. Do not push a new Version: you are answering, not editing.")
+            "question back if it is unclear. Do not push a new Version: you are answering, not editing. "
+            "Do not resolve the Thread (it is the asker's), and @mention another Bot only to ask it to act.")
 
 
 class Watcher:
