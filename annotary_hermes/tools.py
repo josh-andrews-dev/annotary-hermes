@@ -96,7 +96,7 @@ def _with_pending(fn):
 
 PAGE_OFF = ("If the person says the card shows as plain text, or the link opens Hermes's home page "
             "instead of the Document, the Annotary page is off in that browser (Hermes starts it off in "
-            "each new browser): tell them to turn on Annotary in Capabilities → Plugins.")
+            "each new browser): tell them to turn on the Desktop switch on Annotary's card in Capabilities → Plugins.")
 
 
 def links(doc: str) -> dict:
@@ -129,8 +129,8 @@ def _present(c: Caller, doc_id: str) -> dict:
 
 #: First-share setup: what the person does once so Annotary works for them (see _setup_steps).
 PAGE_SETUP = ("Annotary's page has not been switched on anywhere yet, so the card shows as plain text and "
-              "the Document cannot open. In the Webapp: open Capabilities → Plugins and turn on Annotary "
-              "(once in each new browser; Hermes Desktop turns it on by itself). Then reload.")
+              "the Document cannot open. In the Webapp: open Capabilities → Plugins and turn on the Desktop "
+              "switch on Annotary's card (once in each new browser; Hermes Desktop turns it on by itself). Then reload.")
 NAME_SETUP = ("Annotary shows the person as @{handle} until they give a name. Ask what name it should show "
               "for them, then call annotary_set_name with it. If they would rather not, leave it.")
 WAKE_SETUP = ("Send back, Approve and @mentions on a Document wake this chat only once the person allows it; "

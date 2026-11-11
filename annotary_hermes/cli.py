@@ -208,8 +208,8 @@ def doctor(_args=None) -> int:
     if state.load().get("page_seen_at"):
         check(True, "the Annotary page has loaded in Desktop or a browser")
     else:
-        print("note the Annotary page has not loaded anywhere yet: in the Webapp, turn on Annotary in "
-              "Capabilities → Plugins (once per browser); Desktop turns it on by itself")
+        print("note the Annotary page has not loaded anywhere yet: in the Webapp, turn on the Desktop switch on "
+              "Annotary's card in Capabilities → Plugins (once per browser); Desktop turns it on by itself")
     w = _run_hermes(["webapp", "--status"])
     print("Webapp:\n  " + "\n  ".join((w.stdout or w.stderr).strip().splitlines()[:8]))
     for line in _webapp_notes(w.stdout or w.stderr):
