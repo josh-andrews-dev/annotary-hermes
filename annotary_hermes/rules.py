@@ -109,7 +109,7 @@ def push_refusal(*, profile: str, editor: str | None, editor_handle: str | None,
     if editor and editor != profile:
         who = f"@{editor_handle}" if editor_handle else editor
         return (f"{who} edits this Document: comment on a passage with annotary_comment, or @mention {who} "
-                "in a Thread. Only the editor pushes; the editor can hand off with annotary_handoff.")
+                "in a new comment (a Bot's reply wakes no one). Only the editor pushes; the editor can hand off with annotary_handoff.")
     if review_is_open and not review_over:
         return ("A review is open: the person has commented on this Version and has not sent it back "
                 "or approved it yet. Do not push. Wait for Send back or Approve (you will be woken), "

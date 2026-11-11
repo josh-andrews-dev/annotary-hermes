@@ -380,3 +380,20 @@ def test_a_sole_install_outside_default_is_on(hermes_cloud, monkeypatch):
     shutil.rmtree(hermes_cloud / "plugins" / "annotary")  # nothing in default
     monkeypatch.setattr(paths, "package_dir", lambda: here)
     assert enablement.plugin_state("bencha") == enablement.ON
+
+
+def test_a_bot_chat_turn_that_ends_unknown_becomes_a_notification(hermes_cloud):
+    from annotary_hermes import watcher
+    failed = []
+
+    class Broken(FakeTurn):
+        def communicate(self):
+            raise OSError("pipe gone")
+    assert watcher.wake_bot_chat("coder", "[Annotary] x", spawn=lambda argv, **kw: Broken(),
+                                 on_fail=lambda: failed.append(1))
+    import time
+    for _ in range(100):
+        if failed:
+            break
+        time.sleep(0.02)
+    assert failed == [1]
