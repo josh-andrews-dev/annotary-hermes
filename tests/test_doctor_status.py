@@ -52,7 +52,7 @@ def test_the_setup_advice_shows_when_the_webapp_is_not_set_up(webapp, capsys):
 def test_a_configured_public_address_is_where_annotary_links_open(webapp, capsys):
     webapp("Serving at http://[::1]:9120", "webapp:\n  enabled: true\n  public_url: https://agent.example.test/\n")
     out = doctor_output(capsys)
-    assert ADVICE not in out and "https://agent.example.test/#/annotary?doc=<id>" in out
+    assert ADVICE not in out and "https://agent.example.test/?annotary=<id>#/annotary?doc=<id>" in out
 
 
 def test_a_public_address_on_a_webapp_that_is_off_is_not_advertised(webapp, capsys):
@@ -81,7 +81,7 @@ def test_hermes_own_reader_wins_when_it_is_there(webapp, capsys, monkeypatch):
     monkeypatch.setitem(sys.modules, "gateway", types.ModuleType("gateway"))
     monkeypatch.setitem(sys.modules, "gateway.webapp_listener", listener)
     out = doctor_output(capsys)
-    assert ADVICE not in out and "https://hermes.example.test/#/annotary?doc=<id>" in out
+    assert ADVICE not in out and "https://hermes.example.test/?annotary=<id>#/annotary?doc=<id>" in out
 
 
 def _dashboard(name):

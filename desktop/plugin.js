@@ -49,6 +49,70 @@ function useLive(load, deps) {
   return () => setTick(n => n + 1)
 }
 
+// A link's Document: `?annotary=ID` (Hermes's sign-in keeps only path and query, so after signing in
+// this is all that is left; annotary_hermes/webapp.py writes it) or the page's own route.
+const LINK_PARAM = 'annotary'
+const PENDING_KEY = 'annotary.linkedDoc'
+const PENDING_MS = 10 * 60 * 1000
+// How long after this module loads Hermes has to call register() before the page counts as off.
+const OFF_AFTER_MS = 3000
+
+export function linkedDoc(search, hash) {
+  const q = new URLSearchParams(search || '').get(LINK_PARAM)
+  if (q && DOC_RE.test(q)) return q
+  const m = /^#\/annotary(?:\?([^#]*))?$/.exec(hash || '')
+  const doc = m ? new URLSearchParams(m[1] || '').get('doc') : null
+  return doc && DOC_RE.test(doc) ? doc : null
+}
+
+// The Document a link asked for in this tab, kept until the page is on to show it (sessionStorage:
+// this tab only, and only for PENDING_MS, so turning the plugin on later never jumps anywhere).
+export function keepLinked(store, doc, now) {
+  try { store.setItem(PENDING_KEY, JSON.stringify({ doc, at: now })) } catch (err) { /* storage off */ }
+}
+
+export function takeLinked(store, now) {
+  try {
+    const raw = store.getItem(PENDING_KEY)
+    store.removeItem(PENDING_KEY)
+    const v = raw ? JSON.parse(raw) : null
+    return v && DOC_RE.test(v.doc || '') && now - v.at >= 0 && now - v.at < PENDING_MS ? v.doc : null
+  } catch (err) { return null }
+}
+
+let registered = false
+
+// Hermes imports this module even while the page is switched off and then skips register(), and a
+// package's page starts off in each new browser. So a link opened there would land on Hermes's home
+// page with no word why: say so, and offer the switch (enabling stays the person's choice).
+export function bootLink(win, sdk, isRegistered, later = setTimeout) {
+  if (!win || !win.location) return
+  const doc = linkedDoc(win.location.search, win.location.hash)
+  if (!doc) return
+  keepLinked(win.sessionStorage, doc, Date.now())
+  if (new URLSearchParams(win.location.search).has(LINK_PARAM)) {
+    try {
+      const u = new URL(win.location.href)
+      u.searchParams.delete(LINK_PARAM)
+      win.history.replaceState(win.history.state, '', u.pathname + u.search + u.hash)
+    } catch (err) { /* leave the address as it is */ }
+  }
+  later(() => {
+    if (isRegistered()) return
+    // Switched on here but not registered yet (a slow load): it is coming, so no notice.
+    try { if (sdk.pluginDecisions?.get()?.[ID] === true) return } catch (err) { /* older Hermes */ }
+    try {
+      sdk.notify({
+        kind: 'warning',
+        title: 'Annotary is off in this browser',
+        message: 'Hermes starts the Annotary page switched off in each new browser. Turn on Annotary in Capabilities → Plugins, and this Document opens.',
+        action: { label: 'Open Plugins', onClick: () => sdk.navigate('/capabilities?tab=plugins') }
+      })
+    } catch (err) { console.warn('[annotary] page is off in this browser; turn it on in Capabilities → Plugins') }
+  }, OFF_AFTER_MS)
+}
+bootLink(typeof window === 'undefined' ? null : window, host, () => registered)
+
 function hashDoc() {
   const h = window.location.hash || ''
   const q = h.indexOf('?')
@@ -422,8 +486,11 @@ export default {
   id: ID,
   name: 'Annotary',
   register(ctx) {
+    registered = true
     rest = ctx.rest
     os = ctx.os
+    const linked = typeof window === 'undefined' ? null : takeLinked(window.sessionStorage, Date.now())
+    if (linked && hashDoc() !== linked) host.navigate(`${PATH}?doc=${linked}`)
     ctx.registerMany([
       { id: 'page', area: ROUTES_AREA, data: { path: PATH }, render: () => jsx(AnnotaryPage, {}) },
       { id: 'nav', area: SIDEBAR_NAV_AREA, data: { path: PATH, label: 'Annotary', codicon: 'comment-discussion' } },

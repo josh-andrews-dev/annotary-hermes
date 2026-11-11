@@ -103,7 +103,8 @@ Disclosed per the Hermes plugin catalog rules. Nothing leaves the machine except
 
 **Turning the page on in a browser.** Hermes starts a plugin's page switched off in each new
 browser, so in the Webapp turn on **Annotary** once in Capabilities → Plugins. Native Desktop turns
-it on when the plugin is installed. On Hermes 0.23 the Capabilities page fails in Safari, and every
+it on when the plugin is installed. An Annotary link opened in a browser where the page is off shows
+a notice with an **Open Plugins** button, and the Document opens once you turn it on. On Hermes 0.23 the Capabilities page fails in Safari, and every
 iPhone browser uses Safari's engine, so on an iPhone the page cannot be turned on until Hermes fixes
 that; the tools and chat cards still work there.
 
@@ -126,6 +127,11 @@ now removes that copy, so Hermes can put the plugin's own page in its place.
 On a VPS, in Docker or on Hermes Cloud, where Desktop's Web Access switch cannot be used, turn the
 Webapp on in `config.yaml` (`webapp.enabled`, `webapp.public_url`, a sign-in provider);
 `hermes annotary doctor` prints the exact block.
+
+With `webapp.public_url` set, each share returns a full link to the Document,
+`<public_url>/?annotary=<id>#/annotary?doc=<id>`. A sign-in (Hermes Cloud's, or the Webapp's own) keeps
+only the address's path and query, so the Document is in the query too and the page opens it after
+you sign in. Without `public_url` there is no web link, and the agent says so.
 
 A sign-in link signs in only the tab that opened it, because Hermes keeps the grant in that tab's
 `sessionStorage`. So on a Webapp with only sign-in links, an Annotary link opened in a new tab lands

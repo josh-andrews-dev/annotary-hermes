@@ -12,8 +12,9 @@ or **Approve**. Use the `annotary_*` tools; never the `annotary` CLI through the
 
 1. Wrote a plan, spec or report the person should decide on? `annotary_share` it (`path` to a
    `.md` file, or `markdown` + `name`). That makes you its **editor**.
-2. Show it: on Desktop put the returned `card` line (`::annotary{doc="…"}`) on a paragraph of
-   its own; elsewhere give the link. Pass on `tell_the_person` once if it is there.
+2. Show it: in Hermes (Desktop or the Webapp) put the returned `card` line
+   (`::annotary{doc="…"}`) on a paragraph of its own; elsewhere, or when asked for a link, give
+   `links.webapp` exactly. Never build a link yourself. Pass on `tell_the_person` once if it is there.
 3. **Wait.** A review is open while the person comments. Do not push, do not rewrite. You are
    woken when they Send back or Approve, or @mention you.
 4. Sent back: `annotary_threads`, fix what they asked, `annotary_push_version` **once** with the
