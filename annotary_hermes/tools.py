@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import functools
 import json
+import logging
 import re
 import secrets
 import shutil
@@ -19,6 +20,7 @@ from pathlib import Path
 
 from . import accounts, docs, enablement, paths, rules, server, state, webapp
 
+log = logging.getLogger("annotary_hermes")
 CARD = '::annotary{{doc="{doc}"}}'
 DOC_RE = re.compile(r"^[A-Za-z0-9._/~ -]{1,200}$")
 READ_MAX_CHARS = 200_000  # what one tool result may hand the model
@@ -157,8 +159,11 @@ def _setup_steps(c: Caller, root: Path | None) -> list[str]:
             steps.append(NAME_SETUP.format(handle=server.owner_handle(root)))
         if not c.injection_allowed and once(st, "hinted"):
             steps.append(WAKE_SETUP)
-        if behind and once(st, "profiles_told"):
-            steps.append(PROFILES_SETUP.format(profiles=", ".join(sorted(behind))))
+        told = st.setdefault("profiles_told", {}).setdefault(c.profile, [])
+        new = sorted(set(behind) - set(told))  # per reported profile: one cloned later is told too
+        if new:
+            told.extend(new)
+            steps.append(PROFILES_SETUP.format(profiles=", ".join(new)))
         return steps
     return state.update(work, root)
 
@@ -248,7 +253,11 @@ def share(c: Caller, *, path: str = "", markdown: str = "", name: str = "", mess
     out = {"id": doc_id, "name": pushed.get("name"), "version": pushed.get("version"),
            "editor": f"@{accounts.handle_of(c.profile, root)}", **_present(c, doc_id),
            "next": "Wait for the person's review. Do not push again until they Send back or Approve."}
-    steps = _setup_steps(c, root)
+    try:
+        steps = _setup_steps(c, root)
+    except Exception as e:  # noqa: BLE001 — the share happened; a retry would make a duplicate Document
+        log.warning("annotary: setup steps failed: %s", e)
+        steps = []
     if steps:
         out["setup_first"] = steps
         out["setup_how"] = ("Start your reply with these setup steps for the person, in plain words, before "

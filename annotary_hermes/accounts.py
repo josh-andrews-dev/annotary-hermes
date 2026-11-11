@@ -176,7 +176,13 @@ def _enable(owner_tok: str, handle: str, root: Path | None) -> str:
 
 
 def reconcile(root: Path | None = None) -> dict:
-    """Bring Members in step with the profiles. Returns {profile: what happened}."""
+    """Bring Members in step with the profiles. Returns {profile: what happened}. Holds the
+    ``owner`` lock, so it never acts with an owner Token that ``name_person`` is retiring."""
+    with state.locked("owner", root):
+        return _reconcile(root)
+
+
+def _reconcile(root: Path | None) -> dict:
     owner_tok = server.owner_token(root)
     owner = server.owner_handle(root)
     profiles = {p.id: p for p in list_profiles(root)}
@@ -304,23 +310,34 @@ def name_person(name: str, root: Path | None = None) -> dict:
     """Give the person the *name* they chose. Handles never change, so while they still have
     setup's placeholder (``@owner``, or a service account's name) they get a new owner Member with
     a handle made from the name; the placeholder is renamed too (its Comments read as theirs) and
-    disabled. Once named, a new name changes only the display name. Returns ``person()``'s shape."""
+    disabled. Once named, a new name changes only the display name. Returns ``person()``'s shape.
+
+    Safe to run again after a failure at any step: the new handle is recorded before it is
+    created and adopted on the next run, and every earlier placeholder still active is retired."""
     name = " ".join((name or "").split())
     if not name or len(name) > MAX_NAME:
         raise ValueError(f"give a name of 1 to {MAX_NAME} characters")
     with state.locked("owner", root):
         old_tok, old = server.owner_token(root), server.owner_handle(root)
-        remote = _members(old_tok)
         want = _ascii_slug(name)
         if server.owner_named(root) or not want or want == old:
             server.api(old_tok, "POST", "/api/v1/me/rename", {"name": name})
             server.update_secrets({"owner_named": True}, root)
+            _retire_placeholders(old_tok, name, root)
             return {"handle": old, "name": name, "named": True, "changed_handle": False}
-        handle, n = want, 2
-        while handle in remote:
-            handle = f"{want}-{n}"
-            n += 1
-        tok = _add_member(old_tok, handle, name, root)
+        remote = _members(old_tok)
+        pending = server.naming_pending(root)
+        if pending and pending in remote and not remote[pending].get("disabled_at"):
+            handle = pending  # an earlier run created it and stopped before the switch
+            tok = _mint(old_tok, handle, root)
+        else:
+            bots = {m["handle"] for m in state.load(root)["members"].values()}
+            handle, n = want, 2
+            while handle in remote or handle in bots:
+                handle = f"{want}-{n}"
+                n += 1
+            server.update_secrets({"naming_pending": handle}, root)
+            tok = _add_member(old_tok, handle, name, root)
         r = server.run_cli(old_tok, ["member", "role", handle, "owner"], root=root)
         if r.returncode != 0:
             raise server.ServerError(f"member role @{handle} owner: {r.stderr.strip()[-200:]}")
@@ -329,8 +346,23 @@ def name_person(name: str, root: Path | None = None) -> dict:
         password = secrets.token_urlsafe(32)
         server.api(tok, "PUT", "/api/v1/settings/password", {"password": password})
         server.update_secrets({"owner_handle": handle, "owner_token": tok, "owner_password": password,
-                               "owner_named": True,
+                               "owner_named": True, "naming_pending": None,
                                "previous_owners": [*server.previous_owners(root), old]}, root)
-        server.run_cli(tok, ["member", "rename", old, name], root=root)
-        server.api(tok, "POST", f"/api/v1/members/{old}/disable", {})
+        _retire_placeholders(tok, name, root)
         return {"handle": handle, "name": name, "named": True, "changed_handle": True, "was": old}
+
+
+def _retire_placeholders(tok: str, name: str, root: Path | None) -> None:
+    """Rename every earlier placeholder of the person to *name* and disable it. Raises on a
+    failure, so the caller reports it; the next naming finishes the job."""
+    remote = _members(tok)
+    for h in server.previous_owners(root):
+        m = remote.get(h)
+        if not m:
+            continue
+        if m.get("name") != name:
+            r = server.run_cli(tok, ["member", "rename", h, name], root=root)
+            if r.returncode != 0:
+                raise server.ServerError(f"member rename @{h}: {r.stderr.strip()[-200:]}")
+        if not m.get("disabled_at"):
+            server.api(tok, "POST", f"/api/v1/members/{h}/disable", {})

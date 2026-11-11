@@ -146,6 +146,11 @@ def previous_owners(root: Path | None = None) -> list[str]:
     return list(_secrets(root).get("previous_owners") or [])
 
 
+def naming_pending(root: Path | None = None) -> str:
+    """The handle a naming in progress is creating for the person (see accounts.name_person)."""
+    return _secrets(root).get("naming_pending") or ""
+
+
 def update_secrets(changes: dict, root: Path | None = None) -> None:
     """Merge *changes* into secrets.json (mode 600, atomic). Callers hold the ``owner`` lock."""
     paths.write_secret(secrets_file(root), json.dumps({**_secrets(root), **changes}))

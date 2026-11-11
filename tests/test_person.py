@@ -142,3 +142,82 @@ def test_a_profile_running_its_own_copy_is_a_setup_step_once(hermes_cloud):
     assert tools.PROFILES_SETUP.format(profiles="bencha") in first
     assert tools.PROFILES_SETUP.format(profiles="bencha") not in tools.share(
         caller("coder"), markdown="# B\n", name="B").get("setup_first", [])
+
+
+def test_naming_finishes_on_a_retry_after_failing_before_the_switch(hermes_cloud, monkeypatch):
+    real = server.api
+    calls = {"n": 0}
+
+    def flaky(tok, method, path, body=None, **kw):
+        if path == "/api/v1/settings/password" and not calls["n"]:
+            calls["n"] += 1
+            raise server.ServerError("boom")
+        return real(tok, method, path, body, **kw)
+    monkeypatch.setattr(server, "api", flaky)
+    try:
+        tools.set_name(caller("coder"), name="Rowan")
+        raise AssertionError("expected the first naming to fail")
+    except server.ServerError:
+        pass
+    assert server.owner_handle() == "owner" and server.naming_pending() == "rowan"
+    out = tools.set_name(caller("coder"), name="Rowan")
+    assert out["handle"] == "rowan"  # adopted, not a second @rowan-2 beside an orphan
+    m = members()
+    assert "rowan-2" not in m and m["owner"]["disabled_at"] and not m["rowan"]["disabled_at"]
+    assert server.naming_pending() == "" and server.health()["password_set"] is True
+
+
+def test_naming_finishes_on_a_retry_after_failing_after_the_switch(hermes_cloud, monkeypatch):
+    real = server.run_cli
+    calls = {"n": 0}
+
+    def flaky(tok, args, **kw):
+        if args[:2] == ["member", "rename"] and not calls["n"]:
+            calls["n"] += 1
+            return type("R", (), {"returncode": 1, "stderr": "boom", "stdout": ""})()
+        return real(tok, args, **kw)
+    monkeypatch.setattr(server, "run_cli", flaky)
+    try:
+        tools.set_name(caller("coder"), name="Rowan")
+        raise AssertionError("expected the first naming to fail")
+    except server.ServerError:
+        pass
+    assert server.owner_handle() == "rowan" and not members()["owner"]["disabled_at"]
+    tools.set_name(caller("coder"), name="Rowan")
+    m = members()
+    assert m["owner"]["disabled_at"] and m["owner"]["name"] == "Rowan"
+
+
+def test_a_profile_cloned_later_is_told_too(hermes_cloud):
+    import shutil
+
+    from conftest import make_profile
+    accounts.reconcile()
+    tools.share(caller("coder"), markdown="# Plan\n", name="Plan")
+    make_profile(hermes_cloud, "late", annotary=False)
+    late = hermes_cloud / "profiles" / "late"
+    (late / "config.yaml").write_text("model: test\nplugins:\n  enabled:\n    - annotary\n  disabled: []\n")
+    shutil.copytree(hermes_cloud / "plugins" / "annotary", late / "plugins" / "annotary")
+    accounts.reconcile()
+    steps = tools.share(caller("coder"), markdown="# B\n", name="B").get("setup_first", [])
+    assert tools.PROFILES_SETUP.format(profiles="late") in steps
+
+
+def test_a_share_survives_its_setup_steps_failing(hermes_cloud, monkeypatch):
+    def broken(*a, **k):
+        raise OSError("state unreadable")
+    monkeypatch.setattr(tools, "_setup_steps", broken)
+    out = tools.share(caller("coder"), markdown="# Plan\n", name="Plan")
+    assert out["id"] and "setup_first" not in out
+
+
+def test_reconcile_waits_while_the_owner_is_being_switched(hermes_cloud):
+    import threading
+
+    done = threading.Event()
+    with state.locked("owner"):
+        t = threading.Thread(target=lambda: (accounts.reconcile(), done.set()), daemon=True)
+        t.start()
+        assert not done.wait(0.5)
+    t.join(30)
+    assert done.is_set()
