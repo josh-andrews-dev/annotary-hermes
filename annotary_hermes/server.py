@@ -146,6 +146,12 @@ def previous_owners(root: Path | None = None) -> list[str]:
     return list(_secrets(root).get("previous_owners") or [])
 
 
+def person_handle(handle: str, root: Path | None = None) -> str:
+    """The person's current handle for one of their retired placeholders, else *handle* itself:
+    so an agent reading an old Comment or wake-up @mentions the person, not the disabled handle."""
+    return owner_handle(root) if handle and handle in previous_owners(root) else handle
+
+
 def naming_pending(root: Path | None = None) -> str:
     """The handle a naming in progress is creating for the person (see accounts.name_person)."""
     return _secrets(root).get("naming_pending") or ""

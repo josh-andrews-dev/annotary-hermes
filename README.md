@@ -111,6 +111,10 @@ too. Until then the chat cards, which the page draws, show as plain text. The ag
 tells you to do this until the page has loaded somewhere, and `hermes annotary doctor` says whether
 it has.
 
+**After updating the plugin**, restart the gateway (for the tools) and the dashboard (for the page's backend):
+Hermes reloads neither for a plugin it has already loaded. On Hermes Cloud the dashboard runs under s6, so from the
+instance's terminal: `s6-svc -r /run/service/dashboard`.
+
 An earlier version of this plugin copied its page in by hand with no package marker; its setup step
 now removes that copy, so Hermes can put the plugin's own page in its place.
 

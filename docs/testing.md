@@ -45,9 +45,20 @@ profile with `hermes -p <profile> config set model.default <model>` and back the
 
 To check a branch on a Hermes you reach only through its Webapp (Hermes Cloud), push it, then have that instance's
 agent run `hermes plugins install --force --ref <full 40-character commit SHA> <repo URL>`: the Webapp's Install from
-Git takes no ref, and `--ref` takes a full SHA only. The page's new `plugin.js` loads on the next Webapp reload, but the
-tools keep the old Python until the gateway restarts (the dashboard's System → Restart Gateway). To see the page as a
-new browser does, remove `hermes.desktop.pluginDecisions.v2` from the tab's localStorage.
+Git takes no ref, and `--ref` takes a full SHA only. Then three things are still the old build, each until its own step:
+- The published page (`$HERMES_ROOT/desktop-plugins/annotary/plugin.js`): a CLI install updates the plugin's
+  `desktop/` but not this copy. The Webapp re-runs Hermes's half copy when it loads its plugins
+  (`GET /api/desktop-plugins/root`); from a shell, `reconcile_desktop_halves_report` in `hermes_cli/desktop_plugin_halves.py`.
+  Check it with `grep -c attachFrame` or a hash.
+- The tools: until the gateway restarts (`hermes gateway restart --detach`, or the dashboard's System → Restart Gateway).
+- The page's backend (`dashboard/plugin_api.py`): the dashboard imports it once and never again for a plugin already
+  mounted, so a new route stays missing until the dashboard restarts. On Hermes Cloud the dashboard runs under s6:
+  `s6-svc -r /run/service/dashboard` from the instance's terminal (`hermes dashboard` has no restart).
+
+Hermes Desktop on a Mac connected to the instance showed the page from that Mac's own Hermes install
+(`~/.hermes/desktop-plugins/annotary/`, refreshed on View → Reload), not the instance's copy, so check the page in the
+Webapp, or update that Mac's plugin too. To see the page as a new browser does, remove
+`hermes.desktop.pluginDecisions.v2` from the tab's localStorage.
 
 To act as a person on a fresh Hermes Cloud install, mind that the plugin's setup there runs as the OS user `hermes`,
 so the person starts as `@owner` (see `server.SERVICE_USERS`); the `hermes_cloud` test fixture sets up the same way.

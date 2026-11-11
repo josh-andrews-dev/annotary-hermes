@@ -260,3 +260,19 @@ def test_a_retry_that_keeps_the_handle_drops_the_half_made_member(hermes_cloud, 
     m = members()
     assert out["handle"] == "owner" and m["rowan"]["disabled_at"] and not m["owner"]["disabled_at"]
     assert server.naming_pending() == "" and server.owner_named()
+
+
+def test_an_install_that_had_the_old_wake_hint_is_still_asked(hermes_cloud):
+    state.update(lambda st: st["hinted"].update({"coder": True}))  # what an earlier build wrote
+    assert tools.WAKE_SETUP in tools.share(caller("coder"), markdown="# Plan\n", name="Plan")["setup_first"]
+
+
+def test_after_naming_old_comments_and_missed_wakeups_name_the_new_handle(hermes_cloud):
+    from annotary_hermes import docs
+    doc = tools.share(caller("coder"), markdown="# Plan\n\nStep one.\n", name="Plan")["id"]
+    r = server.run_cli(server.owner_token(), ["thread", "new", doc, "--document", "-m", "First thought"])
+    assert r.returncode == 0, r.stderr
+    state.update(lambda st: st["pending"].update({"coder": [{"reason": "mention", "doc": doc, "by": "owner"}]}))
+    out = tools.set_name(caller("coder"), name="Rowan")  # every tool hands over missed wake-ups
+    assert out["missed_wakeups"][0]["by"] == "rowan"
+    assert docs.read_threads(server.owner_token(), doc)[0]["author"] == "rowan"

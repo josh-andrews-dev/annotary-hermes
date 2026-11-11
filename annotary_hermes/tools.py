@@ -78,7 +78,8 @@ def _pending(c: Caller, root: Path | None) -> list[dict]:
     """Wake-ups this profile missed while waking was off: shown once, then cleared."""
     def work(st: dict) -> list:
         return st["pending"].pop(c.profile, [])
-    return state.update(work, root)
+    return [{**w, "by": server.person_handle(w.get("by") or "", root)} if isinstance(w, dict) else w
+            for w in state.update(work, root)]
 
 
 def _with_pending(fn):
@@ -157,7 +158,8 @@ def _setup_steps(c: Caller, root: Path | None) -> list[str]:
         steps = [] if st.get("page_seen_at") else [PAGE_SETUP]
         if not server.owner_named(root) and once(st, "name_asked"):
             steps.append(NAME_SETUP.format(handle=server.owner_handle(root)))
-        if not c.injection_allowed and once(st, "hinted"):
+        # Its own key: "hinted" is an earlier build's one-time hint, which upgraded installs already have.
+        if not c.injection_allowed and once(st, "wake_asked"):
             steps.append(WAKE_SETUP)
         told = st.setdefault("profiles_told", {}).setdefault(c.profile, [])
         new = sorted(set(behind) - set(told))  # per reported profile: one cloned later is told too
