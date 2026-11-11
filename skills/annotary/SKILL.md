@@ -15,9 +15,9 @@ or **Approve**. Use the `annotary_*` tools; never the `annotary` CLI through the
    `.md` file, or `markdown` + `name`). That makes you its **editor**.
 2. Show it: in Hermes (Desktop or the Webapp) put the returned `card` line
    (`::annotary{doc="…"}`) on a paragraph of its own; elsewhere, or when asked for a link, give
-   `links.webapp` exactly. Never build a link yourself. Pass on `tell_the_person` once if it is there.
+   `links.webapp` exactly. Never build a link yourself.
    The result has `setup_first` until Annotary is set up for the person: start your reply with
-   those steps. One asks their name: when they give it, `annotary_set_name`.
+   those steps (the page, their name, wake-ups). When they give a name, `annotary_set_name`.
 3. **Wait.** A review is open while the person comments. Do not push, do not rewrite. You are
    woken when they Send back or Approve, or @mention you.
 4. Sent back: `annotary_threads`, fix what they asked, `annotary_push_version` **once** with the

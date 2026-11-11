@@ -124,40 +124,41 @@ def _present(c: Caller, doc_id: str) -> dict:
     return out
 
 
-def _wake_hint(c: Caller, root: Path | None) -> str | None:
-    """Ask once (D5): the first share tells the person how to let comments wake the chat."""
-    if c.injection_allowed:
-        return None
-    def work(st: dict) -> bool:
-        if st["hinted"].get(c.profile):
-            return False
-        st["hinted"][c.profile] = True
-        return True
-    if not state.update(work, root):
-        return None
-    return ("Tell the person: Send back, Approve and @mentions on this Document can wake this chat. "
-            "To allow it, run `hermes annotary wake on` (or turn on gateway injection for Annotary in "
-            "Settings → Plugins). Until then they show as notifications, and you see them on your next "
-            "Annotary tool call.")
-
-
 #: First-share setup: what the person does once so Annotary works for them (see _setup_steps).
 PAGE_SETUP = ("Annotary's page has not been switched on anywhere yet, so the card shows as plain text and "
               "the Document cannot open. In the Webapp: open Capabilities → Plugins and turn on Annotary "
               "(once in each new browser; Hermes Desktop turns it on by itself). Then reload.")
 NAME_SETUP = ("Annotary shows the person as @{handle} until they give a name. Ask what name it should show "
               "for them, then call annotary_set_name with it. If they would rather not, leave it.")
+WAKE_SETUP = ("Send back, Approve and @mentions on a Document wake this chat only once the person allows it; "
+              "until then they show as notifications, and you see them on your next Annotary tool call. Ask "
+              "whether they want that. If yes: `hermes annotary wake on` in a terminal (run it, or ask them to).")
+PROFILES_SETUP = ("Annotary is off, or an old copy that updates never reach, in profile(s) {profiles}: those "
+                  "Bots cannot edit or be woken. Have `hermes annotary enable --all` run in a terminal, then "
+                  "`hermes gateway restart --detach`.")
 
 
 def _setup_steps(c: Caller, root: Path | None) -> list[str]:
-    """Setup the person still needs, said on a share: the page step until any browser or Desktop
-    has loaded the page; the name step until they give one, asked once per profile."""
+    """Setup the person still needs, said on a share. The page step until any browser or Desktop
+    has loaded the page; the others once per profile, so a "no" is not asked again."""
+    behind = [pid for pid, m in state.load(root)["members"].items()
+              if not m.get("disabled") and enablement.plugin_state(pid, root) in (enablement.OFF, enablement.COPY)]
+
+    def once(st: dict, key: str) -> bool:
+        asked = st.setdefault(key, {})
+        if asked.get(c.profile):
+            return False
+        asked[c.profile] = True
+        return True
+
     def work(st: dict) -> list[str]:
         steps = [] if st.get("page_seen_at") else [PAGE_SETUP]
-        asked = st.setdefault("name_asked", {})
-        if not server.owner_named(root) and not asked.get(c.profile):
-            asked[c.profile] = True
+        if not server.owner_named(root) and once(st, "name_asked"):
             steps.append(NAME_SETUP.format(handle=server.owner_handle(root)))
+        if not c.injection_allowed and once(st, "hinted"):
+            steps.append(WAKE_SETUP)
+        if behind and once(st, "profiles_told"):
+            steps.append(PROFILES_SETUP.format(profiles=", ".join(sorted(behind))))
         return steps
     return state.update(work, root)
 
@@ -252,9 +253,6 @@ def share(c: Caller, *, path: str = "", markdown: str = "", name: str = "", mess
         out["setup_first"] = steps
         out["setup_how"] = ("Start your reply with these setup steps for the person, in plain words, before "
                             "the card. Annotary works for them once they are done.")
-    hint = _wake_hint(c, root)
-    if hint:
-        out["tell_the_person"] = hint
     return out
 
 

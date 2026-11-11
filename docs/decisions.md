@@ -225,11 +225,16 @@ is in the maintainer's private plan.
   @mentions of the person would stay `@owner`.
 - **The first share leads with setup.** Chose a share that goes through and returns
   `setup_first`: the page step until the page has registered in Desktop or any browser (it posts
-  `/seen`), and the name step once per profile until the person has a name. Rejected holding the
+  `/seen`); once per profile, the name (until the person has one), wake-ups (until allowed) and
+  any profile where Annotary is off or a stale copy. Rejected holding the
   share until the page is on, because the plugin cannot tell which browser the person is in, and it
   costs a round trip. Drift later is fixed through the skill's "When something is off" and
   `hermes annotary doctor`.
 - **Correction to 2026-11-10: phones work.** A real iPhone turns the page on through a link's
   notice (Open Plugins goes straight to the Plugins tab). The Safari failure was seen in the
   Simulator opening Capabilities on its first tab.
+- **The embed frame's ref is stable, and a re-attach keeps it ready.** React detaches and
+  re-attaches a callback ref whenever the callback changes; the old inline ref then forgot the
+  shell's one-time `annotary-ready`, so every Document after the first never loaded
+  (`attachFrame` in `desktop/plugin.js`).
 

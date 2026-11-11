@@ -34,10 +34,10 @@ def test_a_named_os_user_is_the_person_and_is_never_asked(hermes):
 
 def test_the_first_share_leads_with_setup_and_asks_the_name_once(hermes_cloud):
     first = tools.share(caller("coder"), markdown="# Plan\n", name="Plan")
-    assert first["setup_first"] == [tools.PAGE_SETUP, tools.NAME_SETUP.format(handle="owner")]
+    assert first["setup_first"] == [tools.PAGE_SETUP, tools.NAME_SETUP.format(handle="owner"), tools.WAKE_SETUP]
     assert "Start your reply" in first["setup_how"]
     again = tools.share(caller("coder"), markdown="# Other\n", name="Other")
-    assert again["setup_first"] == [tools.PAGE_SETUP]  # the page step stays until the page loads
+    assert again["setup_first"] == [tools.PAGE_SETUP]  # the page step stays until the page loads; the rest are asked once
     tools.record_page_seen()
     done = tools.share(caller("coder"), markdown="# Third\n", name="Third")
     assert "setup_first" not in done and "setup_how" not in done
@@ -66,7 +66,7 @@ def test_naming_gives_the_person_a_real_handle_and_keeps_the_server_closed(herme
     threads = server.api(server.owner_token(), "GET", f"/api/v1/docs/{doc}/threads")["threads"]
     assert threads and threads[0]["author"] == "owner"  # the card shows this Member's display name, now Rowan
     steps = tools.share(caller("bencha"), markdown="# B\n", name="B").get("setup_first", [])
-    assert steps == [tools.PAGE_SETUP]  # named now: no profile asks again
+    assert not any("annotary_set_name" in step for step in steps)  # named now: no profile asks again
 
 
 def test_a_second_name_changes_only_the_display_name(hermes_cloud):
@@ -124,3 +124,21 @@ def test_the_cli_names_the_person(hermes_cloud, capsys):
     from annotary_hermes import cli
     assert cli.name(argparse.Namespace(name=["Rowan", "Lee"])) == 0
     assert "You are @rowan-lee, shown as Rowan Lee. @owner is retired." in capsys.readouterr().out
+
+
+def test_wake_ups_already_allowed_are_not_asked(hermes_cloud):
+    c = tools.Caller(profile="coder", surface="desktop", injection_allowed=True)
+    assert tools.WAKE_SETUP not in tools.share(c, markdown="# Plan\n", name="Plan")["setup_first"]
+
+
+def test_a_profile_running_its_own_copy_is_a_setup_step_once(hermes_cloud):
+    from conftest import make_profile
+    import shutil
+    accounts.reconcile()
+    here = hermes_cloud / "profiles" / "bencha" / "plugins" / "annotary"
+    here.unlink()
+    shutil.copytree(hermes_cloud / "plugins" / "annotary", here)  # a cloned profile's own copy
+    first = tools.share(caller("coder"), markdown="# Plan\n", name="Plan")["setup_first"]
+    assert tools.PROFILES_SETUP.format(profiles="bencha") in first
+    assert tools.PROFILES_SETUP.format(profiles="bencha") not in tools.share(
+        caller("coder"), markdown="# B\n", name="B").get("setup_first", [])

@@ -83,8 +83,8 @@ The plugin, not the model, decides when an agent wakes:
   `annotary_act` to Send back. A plain comment still wakes nobody.
 
 Waking needs Hermes's `allow_gateway_injection` permission for this plugin, per profile. It is
-off until you turn it on (`hermes annotary wake on`, or Settings → Plugins); the first share tells
-you how. While it is off, Send back, Approve and @mentions show as notifications, and the agent
+off until you turn it on (`hermes annotary wake on`, or Settings → Plugins); the agent's first share
+asks whether you want it. While it is off, Send back, Approve and @mentions show as notifications, and the agent
 sees them on its next Annotary tool call.
 
 ## What it writes, and where
