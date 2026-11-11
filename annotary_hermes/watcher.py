@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import secrets
 import shutil
 import subprocess
@@ -31,6 +32,18 @@ Broadcast = Callable[[str, dict], None]  # (event name, payload)
 #: runs one turn in that titled chat, creating it if needed (Bot Mode's agent-to-agent DMs use it too).
 BOT_CHAT = "Bot Chat"
 WAKE_FILE_TTL = 3600
+
+
+#: Hermes approval-context variables the gateway may carry. The Bot Chat turn must not inherit them:
+#: catalog rule 12 forbids a Hermes child that inherits YOLO, and the session/cron/ask markers would
+#: put the child in another approval context than the single-query one Hermes gives `chat -Q`.
+_APPROVAL_ENV = ("HERMES_YOLO_MODE", "HERMES_CRON_SESSION", "HERMES_EXEC_ASK", "HERMES_GATEWAY_SESSION")
+_APPROVAL_ENV_PREFIXES = ("HERMES_SESSION_",)
+
+
+def _bot_chat_env() -> dict[str, str]:
+    return {k: v for k, v in os.environ.items()
+            if k not in _APPROVAL_ENV and not k.startswith(_APPROVAL_ENV_PREFIXES)}
 
 
 def _hermes_argv() -> list[str]:
@@ -67,8 +80,8 @@ def wake_bot_chat(profile: str, text: str, root: Path | None = None, *, spawn=su
         try:
             child = spawn([*_hermes_argv(), "-p", profile, "chat", "--in", str(Path.home()), "-c", BOT_CHAT,
                            "--create-if-missing", "-Q", "--query-file", str(query)],
-                          stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
-                          start_new_session=True)
+                          env=_bot_chat_env(), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                          stderr=subprocess.PIPE, start_new_session=True)
         except OSError as e:
             query.unlink(missing_ok=True)
             log.warning("annotary: could not wake %s in its Bot Chat: %s", profile, e)
