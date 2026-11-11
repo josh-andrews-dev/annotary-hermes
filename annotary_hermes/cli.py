@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import json
-import re
 import shutil
 import subprocess
 import sys
 
-from . import accounts, desktop, enablement, install, paths, rules, server, state
+from . import accounts, desktop, enablement, install, paths, rules, server, state, webapp
 
 
 def _hermes() -> list[str]:
@@ -205,30 +204,15 @@ def doctor(_args=None) -> int:
     return 1 if problems else 0
 
 
-def _webapp_settings() -> tuple[bool, str]:
-    """(turned on, public address), read as Hermes reads them; "" for an address it would not use."""
-    root = paths.hermes_root()
-    try:
-        from gateway.webapp_listener import webapp_settings
-    except ImportError:  # not running inside Hermes
-        conf = accounts._read_profile_yaml(root / "config.yaml").get("webapp")
-        conf = conf if isinstance(conf, dict) else {}
-        public = conf.get("public_url")
-        valid = isinstance(public, str) and re.fullmatch(r"https?://[^\s/?#@]+(/[^\s?#@]*)?", public)
-        return conf.get("enabled") is True, public.rstrip("/") if valid else ""
-    settings = webapp_settings(root)
-    return settings.enabled is True, settings.public_url or ""
-
-
 def _webapp_notes(status_text: str) -> list[str]:
     """The public address when there is one, and the setup advice only for a Webapp not set up."""
-    enabled, public = _webapp_settings()
+    enabled, public = webapp.settings()
     if enabled or "Serving at" in status_text:
-        return [f"  Annotary links open the Annotary page at {public}/#/annotary?doc=<id>."] if public else []
+        return [f"  Annotary links open the Annotary page at {public}/?annotary=<id>#/annotary?doc=<id>."] if public else []
     return ["  Where Web Access cannot be switched on (a VPS, Docker, Hermes Cloud), set in config.yaml:",
             "    webapp:\n      enabled: true\n      public_url: https://<the HTTPS address you serve it at>",
             "  and a sign-in provider (see Hermes's docker.md, \"Behind a tunnel or reverse proxy\").",
-            "  Annotary links then open the Annotary page at <public_url>/#/annotary?doc=<id>."]
+            "  Annotary links then open the Annotary page at <public_url>/?annotary=<id>#/annotary?doc=<id>."]
 
 
 def stop(_args=None) -> int:

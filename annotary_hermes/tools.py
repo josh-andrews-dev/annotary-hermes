@@ -16,7 +16,7 @@ import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import accounts, docs, enablement, paths, rules, server, state
+from . import accounts, docs, enablement, paths, rules, server, state, webapp
 
 CARD = '::annotary{{doc="{doc}"}}'
 DOC_RE = re.compile(r"^[A-Za-z0-9._/~ -]{1,200}$")
@@ -90,18 +90,36 @@ def _with_pending(fn):
     return run
 
 
+PAGE_OFF = ("If the person says the card shows as plain text, or the link opens Hermes's home page "
+            "instead of the Document, the Annotary page is off in that browser (Hermes starts it off in "
+            "each new browser): tell them to turn on Annotary in Capabilities → Plugins.")
+
+
 def links(doc: str) -> dict:
+    """`webapp` is the full web address (it survives Hermes's sign-in), present only when
+    `webapp.public_url` is set: never a bare route, which agents completed with a wrong origin."""
     q = urllib.parse.urlencode({"doc": doc})
-    return {"desktop": f"hermes://open/annotary?{q}", "webapp_path": f"#/annotary?{q}"}
+    out = {"desktop": f"hermes://open/annotary?{q}"}
+    url = webapp.doc_url(doc)
+    if url:
+        out["webapp"] = url
+    return out
 
 
 def _present(c: Caller, doc_id: str) -> dict:
-    out = {"links": links(doc_id)}
+    lk = links(doc_id)
+    web = ("give links.webapp exactly as it is" if "webapp" in lk else
+           "there is no web link, because webapp.public_url is not set; say so")
+    out = {"links": lk}
+    # Native Desktop and the Webapp both report the surface "desktop"; both draw the card.
     if c.surface == "desktop":
         out["card"] = CARD.format(doc=doc_id)
-        out["show_card"] = "Put the card line on a paragraph of its own in your reply; Desktop draws it."
+        out["show_card"] = ("Put the card line on a paragraph of its own in your reply; Hermes draws it, and its "
+                            f"Open button shows the Document. If the person asks for a link, {web}; never build "
+                            f"a link yourself. {PAGE_OFF}")
     else:
-        out["show_link"] = "Give the person the desktop link; on a phone they open the Annotary page in the Webapp."
+        out["show_link"] = (f"For a browser or a phone, {web}; never build a link yourself. links.desktop "
+                            f"opens the Hermes Desktop app. {PAGE_OFF}")
     return out
 
 
