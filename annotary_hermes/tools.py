@@ -8,16 +8,19 @@ from __future__ import annotations
 
 import functools
 import json
+import logging
 import re
 import secrets
 import shutil
 import tempfile
+import time
 import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
 
 from . import accounts, docs, enablement, paths, rules, server, state, webapp
 
+log = logging.getLogger("annotary_hermes")
 CARD = '::annotary{{doc="{doc}"}}'
 DOC_RE = re.compile(r"^[A-Za-z0-9._/~ -]{1,200}$")
 READ_MAX_CHARS = 200_000  # what one tool result may hand the model
@@ -75,7 +78,8 @@ def _pending(c: Caller, root: Path | None) -> list[dict]:
     """Wake-ups this profile missed while waking was off: shown once, then cleared."""
     def work(st: dict) -> list:
         return st["pending"].pop(c.profile, [])
-    return state.update(work, root)
+    return [{**w, "by": server.person_handle(w.get("by") or "", root)} if isinstance(w, dict) else w
+            for w in state.update(work, root)]
 
 
 def _with_pending(fn):
@@ -123,21 +127,54 @@ def _present(c: Caller, doc_id: str) -> dict:
     return out
 
 
-def _wake_hint(c: Caller, root: Path | None) -> str | None:
-    """Ask once (D5): the first share tells the person how to let comments wake the chat."""
-    if c.injection_allowed:
-        return None
-    def work(st: dict) -> bool:
-        if st["hinted"].get(c.profile):
+#: First-share setup: what the person does once so Annotary works for them (see _setup_steps).
+PAGE_SETUP = ("Annotary's page has not been switched on anywhere yet, so the card shows as plain text and "
+              "the Document cannot open. In the Webapp: open Capabilities → Plugins and turn on Annotary "
+              "(once in each new browser; Hermes Desktop turns it on by itself). Then reload.")
+NAME_SETUP = ("Annotary shows the person as @{handle} until they give a name. Ask what name it should show "
+              "for them, then call annotary_set_name with it. If they would rather not, leave it.")
+WAKE_SETUP = ("Send back, Approve and @mentions on a Document wake this chat only once the person allows it; "
+              "until then they show as notifications, and you see them on your next Annotary tool call. Ask "
+              "whether they want that. If yes: `hermes annotary wake on` in a terminal (run it, or ask them to).")
+PROFILES_SETUP = ("Annotary is off, or an old copy that updates never reach, in profile(s) {profiles}: those "
+                  "Bots cannot edit or be woken. Have `hermes annotary enable --all` run in a terminal, then "
+                  "`hermes gateway restart --detach`.")
+
+
+def _setup_steps(c: Caller, root: Path | None) -> list[str]:
+    """Setup the person still needs, said on a share. The page step until any browser or Desktop
+    has loaded the page; the others once per profile, so a "no" is not asked again."""
+    behind = [pid for pid, m in state.load(root)["members"].items()
+              if not m.get("disabled") and enablement.plugin_state(pid, root) in (enablement.OFF, enablement.COPY)]
+
+    def once(st: dict, key: str) -> bool:
+        asked = st.setdefault(key, {})
+        if asked.get(c.profile):
             return False
-        st["hinted"][c.profile] = True
+        asked[c.profile] = True
         return True
-    if not state.update(work, root):
-        return None
-    return ("Tell the person: Send back, Approve and @mentions on this Document can wake this chat. "
-            "To allow it, run `hermes annotary wake on` (or turn on gateway injection for Annotary in "
-            "Settings → Plugins). Until then they show as notifications, and you see them on your next "
-            "Annotary tool call.")
+
+    def work(st: dict) -> list[str]:
+        steps = [] if st.get("page_seen_at") else [PAGE_SETUP]
+        if not server.owner_named(root) and once(st, "name_asked"):
+            steps.append(NAME_SETUP.format(handle=server.owner_handle(root)))
+        # Its own key: "hinted" is an earlier build's one-time hint, which upgraded installs already have.
+        if not c.injection_allowed and once(st, "wake_asked"):
+            steps.append(WAKE_SETUP)
+        told = st.setdefault("profiles_told", {}).setdefault(c.profile, [])
+        new = sorted(set(behind) - set(told))  # per reported profile: one cloned later is told too
+        if new:
+            told.extend(new)
+            steps.append(PROFILES_SETUP.format(profiles=", ".join(new)))
+        return steps
+    return state.update(work, root)
+
+
+def record_page_seen(root: Path | None = None) -> None:
+    """The page registered somewhere (Desktop, or a browser where it is switched on)."""
+    def work(st: dict) -> None:
+        st["page_seen_at"] = time.time()
+    state.update(work, root)
 
 
 def _stem(name: str) -> str:
@@ -218,9 +255,15 @@ def share(c: Caller, *, path: str = "", markdown: str = "", name: str = "", mess
     out = {"id": doc_id, "name": pushed.get("name"), "version": pushed.get("version"),
            "editor": f"@{accounts.handle_of(c.profile, root)}", **_present(c, doc_id),
            "next": "Wait for the person's review. Do not push again until they Send back or Approve."}
-    hint = _wake_hint(c, root)
-    if hint:
-        out["tell_the_person"] = hint
+    try:
+        steps = _setup_steps(c, root)
+    except Exception as e:  # noqa: BLE001 — the share happened; a retry would make a duplicate Document
+        log.warning("annotary: setup steps failed: %s", e)
+        steps = []
+    if steps:
+        out["setup_first"] = steps
+        out["setup_how"] = ("Start your reply with these setup steps for the person, in plain words, before "
+                            "the card. Annotary works for them once they are done.")
     return out
 
 
@@ -416,4 +459,23 @@ def list_docs(c: Caller, *, root: Path | None = None) -> dict:
         if editor:
             row["editor"] = "@" + st["members"].get(editor, {}).get("handle", editor)
             row["you_are_editor"] = editor == c.profile
-    return {"you": f"@{accounts.handle_of(c.profile, root)}", "documents": rows}
+    me = accounts.person(root)
+    return {"you": f"@{accounts.handle_of(c.profile, root)}",
+            "person": {"handle": f"@{me['handle']}", "name": me["name"], "named": me["named"]},
+            "documents": rows}
+
+
+@_with_pending
+def set_name(c: Caller, *, name: str, root: Path | None = None) -> dict:
+    """The person's name, as they gave it in chat."""
+    _prepare(c, root)
+    try:
+        out = accounts.name_person(name, root)
+    except ValueError as e:
+        raise ToolError(str(e)) from None
+    said = f"The person is now @{out['handle']}, shown as {out['name']}."
+    if out.get("changed_handle"):
+        said += f" Their placeholder @{out['was']} is retired: @mention them as @{out['handle']}."
+    elif not server.slug(out["name"]):
+        said += " Their handle stays, because a handle is made from Latin letters and digits."
+    return {**{k: out[k] for k in ("handle", "name")}, "said": said}

@@ -223,9 +223,24 @@ async function openExternal(d) {
   setTimeout(() => URL.revokeObjectURL(a.href), 60000)
 }
 
+// The frame's ref. React detaches a ref (null) and attaches it again (the same element) whenever the
+// callback changes, so only a different element means a new frame: one that has not said
+// `annotary-ready` yet. The shell says it once, so forgetting it on a mere re-attach strands every
+// later `annotary-init` and the frame keeps showing the first Document.
+export function attachFrame(ref, ready, el, live = frames) {
+  if (!el) {
+    if (ref.current) live.delete(ref.current)
+    return
+  }
+  if (ref.current !== el) ready.current = false
+  ref.current = el
+  live.add(el)
+}
+
 function EmbedFrame({ doc, onNav }) {
   const ref = useRef(null)
   const ready = useRef(false)
+  const setFrame = useCallback(el => attachFrame(ref, ready, el), [])
   const shown = useRef(null) // the path the frame last said it shows
   const [src, setSrc] = useState(null)
   const [error, setError] = useState(null)
@@ -279,7 +294,7 @@ function EmbedFrame({ doc, onNav }) {
   }, [init, onNav])
   if (error) return jsx('div', { style: { padding: 12, ...muted }, children: error })
   return src && jsx(SandboxedFrame, {
-    ref: el => { if (ref.current && ref.current !== el) { frames.delete(ref.current); ready.current = false } ref.current = el; if (el) frames.add(el) },
+    ref: setFrame,
     src, title: 'Annotary', sandbox: 'allow-scripts allow-forms',
     style: { width: '100%', height: '100%', border: 0, flex: 1 }
   })
@@ -489,6 +504,8 @@ export default {
     registered = true
     rest = ctx.rest
     os = ctx.os
+    // Tells the agent's first share that the page is on somewhere, so it skips that setup step.
+    Promise.resolve().then(() => rest('/seen', { method: 'POST', body: {} })).catch(() => {})
     const linked = typeof window === 'undefined' ? null : takeLinked(window.sessionStorage, Date.now())
     if (linked && hashDoc() !== linked) host.navigate(`${PATH}?doc=${linked}`)
     ctx.registerMany([

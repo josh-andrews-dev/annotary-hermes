@@ -22,6 +22,7 @@ provides_tools:
   - annotary_handoff
   - annotary_act
   - annotary_list
+  - annotary_set_name
 config_schema:
   notify_when_off:
     type: bool

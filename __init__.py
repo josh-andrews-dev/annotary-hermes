@@ -89,8 +89,13 @@ SCHEMAS = {
         "parameters": {"type": "object", "properties": {
             "doc": _DOC, "action": {"type": "string"}}, "required": ["doc", "action"]}},
     "annotary_list": {
-        "description": "List Annotary Documents, who edits each, and wake-ups you missed.",
+        "description": "List Annotary Documents, who edits each, the person's handle, and wake-ups you missed.",
         "parameters": {"type": "object", "properties": {}, "required": []}},
+    "annotary_set_name": {
+        "description": ("Set the name Annotary shows for the person, as they told you in chat (\"Rowan\"). While they "
+                        "have no name yet, this also gives them a handle made from it (@rowan)."),
+        "parameters": {"type": "object", "properties": {
+            "name": {"type": "string", "description": "The person's name, as they gave it"}}, "required": ["name"]}},
 }
 
 
@@ -149,6 +154,7 @@ def register(ctx):
         "annotary_handoff": (tools.handoff, pick("doc", "to")),
         "annotary_act": (tools.act, pick("doc", "action")),
         "annotary_list": (tools.list_docs, pick()),
+        "annotary_set_name": (tools.set_name, pick("name")),
     }
     for name, (fn, params) in table.items():
         ctx.register_tool(name=name, toolset=TOOLSET, schema={"name": name, **SCHEMAS[name]},

@@ -124,11 +124,11 @@ def test_a_shared_document_keeps_the_name_it_was_given(hermes):
 def test_share_records_editor_and_session_and_asks_once(hermes):
     out = share(surface="desktop")
     assert out["card"] == f'::annotary{{doc="{out["id"]}"}}'
-    assert "wake on" in out["tell_the_person"]
+    assert tools.WAKE_SETUP in out["setup_first"]
     doc = state.load()["docs"][out["id"]]
     assert (doc["editor"], doc["session_key"]) == ("coder", "sess-coder")
     again = tools.share(caller("coder", "sess-coder"), markdown="# Other\n", name="Other")
-    assert "tell_the_person" not in again and "card" not in again
+    assert tools.WAKE_SETUP not in again.get("setup_first", []) and "card" not in again
 
 
 def test_only_the_editor_pushes_and_never_mid_review(hermes):

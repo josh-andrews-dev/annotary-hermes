@@ -4,6 +4,7 @@ The page reaches the private server only through these routes (they act as the o
 works from every surface: native Desktop, Desktop over SSH, the Webapp on a phone.
 
     GET  /status             server, wake-ups, whether the server has embed mode
+    POST /seen               the page registered (Desktop, or a browser where it is on)
     GET  /documents          the Document list, with each Document's editor
     GET  /doc?id=ID          one Document: header, rendered HTML, open Threads, Actions, editor
     POST /act      {doc, action}
@@ -32,7 +33,7 @@ _PLUGIN = Path(__file__).resolve().parents[1]
 if str(_PLUGIN) not in sys.path:
     sys.path.insert(0, str(_PLUGIN))
 
-from annotary_hermes import accounts, bridge, desktop, enablement, paths, server, state  # noqa: E402
+from annotary_hermes import accounts, bridge, desktop, enablement, paths, server, state, tools  # noqa: E402
 
 log = logging.getLogger("annotary_hermes")
 router = APIRouter()
@@ -107,6 +108,12 @@ def _status() -> dict:
 @router.get("/status")
 async def status():
     return await asyncio.to_thread(_status)
+
+
+@router.post("/seen")
+async def seen():
+    await asyncio.to_thread(tools.record_page_seen)
+    return {"ok": True}
 
 
 def _current_action(d: dict) -> dict | None:

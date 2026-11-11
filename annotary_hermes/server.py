@@ -108,8 +108,20 @@ def slug(text: str, *, max_len: int = 32) -> str:
     return s[:max_len].strip("-")
 
 
-def _os_identity() -> tuple[str, str]:
+#: OS accounts that name a machine or a service, not the person: Hermes Cloud runs as ``hermes``.
+#: The person behind one starts as ``@owner`` until they give a name (``accounts.name_person``).
+SERVICE_USERS = frozenset({
+    "hermes", "hermes-agent", "agent", "root", "admin", "administrator", "user", "ubuntu", "debian",
+    "ec2-user", "centos", "fedora", "pi", "app", "node", "runner", "docker", "container", "www-data",
+    "nobody", "default", "owner", "guest", "vagrant", "codespace"})
+PLACEHOLDER_HANDLE, PLACEHOLDER_NAME = "owner", "Owner"
+
+
+def _os_identity() -> tuple[str, str, bool]:
+    """(handle, display name, named): the OS user, or the placeholder for a service account."""
     user = getpass.getuser()
+    if slug(user) in SERVICE_USERS or not slug(user):
+        return PLACEHOLDER_HANDLE, PLACEHOLDER_NAME, False
     name = user
     try:
         import pwd
@@ -117,7 +129,37 @@ def _os_identity() -> tuple[str, str]:
         name = gecos or user
     except (ImportError, KeyError):
         pass
-    return slug(user) or "owner", name
+    return slug(user), name, True
+
+
+def owner_named(root: Path | None = None) -> bool:
+    """Whether the person has a name of their own. An install from before this flag counts as named
+    unless setup gave it a service account's handle."""
+    sec = _secrets(root)
+    if "owner_named" in sec:
+        return bool(sec["owner_named"])
+    return bool(sec.get("owner_handle")) and sec["owner_handle"] not in SERVICE_USERS
+
+
+def previous_owners(root: Path | None = None) -> list[str]:
+    """Placeholder handles the person had before naming themselves: still the person, disabled."""
+    return list(_secrets(root).get("previous_owners") or [])
+
+
+def person_handle(handle: str, root: Path | None = None) -> str:
+    """The person's current handle for one of their retired placeholders, else *handle* itself:
+    so an agent reading an old Comment or wake-up @mentions the person, not the disabled handle."""
+    return owner_handle(root) if handle and handle in previous_owners(root) else handle
+
+
+def naming_pending(root: Path | None = None) -> str:
+    """The handle a naming in progress is creating for the person (see accounts.name_person)."""
+    return _secrets(root).get("naming_pending") or ""
+
+
+def update_secrets(changes: dict, root: Path | None = None) -> None:
+    """Merge *changes* into secrets.json (mode 600, atomic). Callers hold the ``owner`` lock."""
+    paths.write_secret(secrets_file(root), json.dumps({**_secrets(root), **changes}))
 
 
 def parse_setup_token(stdout: str) -> str | None:
@@ -140,7 +182,7 @@ def setup_if_needed(root: Path | None = None) -> bool:
     password nobody types (it closes loopback trust). Returns True when it ran."""
     if _secrets(root).get("owner_token"):
         return False
-    handle, name = _os_identity()
+    handle, name, named = _os_identity()
     password = secrets.token_urlsafe(32)
     env = cli_env(None, root)
     env.update(ANNOTARY_SETUP_HANDLE=handle, ANNOTARY_SETUP_NAME=name, ANNOTARY_SETUP_PASSWORD=password)
@@ -154,7 +196,7 @@ def setup_if_needed(root: Path | None = None) -> bool:
         # Never echo stdout: it holds the Token. Only the error stream's tail, which does not.
         raise ServerError(f"first-run setup failed (exit {out.returncode}): {out.stderr.strip()[-300:]}")
     paths.write_secret(secrets_file(root), json.dumps(
-        {"owner_handle": handle, "owner_password": password, "owner_token": token}))
+        {"owner_handle": handle, "owner_password": password, "owner_token": token, "owner_named": named}))
     return True
 
 

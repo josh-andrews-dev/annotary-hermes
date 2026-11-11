@@ -56,8 +56,9 @@ def members(_args=None) -> int:
     accounts.reconcile()
     st = state.load()
     print(f"{'PROFILE':<16} {'HANDLE':<20} {'NAME':<24} STATE")
-    owner = server.owner_handle()
-    print(f"{'(you)':<16} @{owner:<19} {'':<24} owner")
+    you = accounts.person()
+    print(f"{'(you)':<16} @{you['handle']:<19} {you['name']:<24} owner"
+          + ("" if you["named"] else f", no name yet ({NAME_FIX})"))
     off = []
     for pid, m in sorted(st["members"].items()):
         flag = "disabled" if m.get("disabled") else "active"
@@ -196,6 +197,19 @@ def doctor(_args=None) -> int:
                 enablement.DECLINED: f"Annotary is off in profile {pid}, as you chose (to turn it on: "
                                      f"{enablement.turn_on(pid)})"}
         check(plugin in (enablement.ON, enablement.DECLINED), what[plugin], enablement.FIX)
+    try:
+        you = accounts.person()
+        if you["named"]:
+            check(True, f"you are @{you['handle']} ({you['name']})")
+        else:
+            print(f"note you show as @{you['handle']} until you give a name: {NAME_FIX}")
+    except Exception as e:  # noqa: BLE001
+        check(False, f"your Member: {e}")
+    if state.load().get("page_seen_at"):
+        check(True, "the Annotary page has loaded in Desktop or a browser")
+    else:
+        print("note the Annotary page has not loaded anywhere yet: in the Webapp, turn on Annotary in "
+              "Capabilities → Plugins (once per browser); Desktop turns it on by itself")
     w = _run_hermes(["webapp", "--status"])
     print("Webapp:\n  " + "\n  ".join((w.stdout or w.stderr).strip().splitlines()[:8]))
     for line in _webapp_notes(w.stdout or w.stderr):
@@ -213,6 +227,22 @@ def _webapp_notes(status_text: str) -> list[str]:
             "    webapp:\n      enabled: true\n      public_url: https://<the HTTPS address you serve it at>",
             "  and a sign-in provider (see Hermes's docker.md, \"Behind a tunnel or reverse proxy\").",
             "  Annotary links then open the Annotary page at <public_url>/?annotary=<id>#/annotary?doc=<id>."]
+
+
+NAME_FIX = 'hermes annotary name "Your Name"'
+
+
+def name(args) -> int:
+    """The person's name; while they have none, also their handle (see accounts.name_person)."""
+    server.ensure_running()
+    try:
+        out = accounts.name_person(" ".join(args.name))
+    except ValueError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    print(f"You are @{out['handle']}, shown as {out['name']}."
+          + (f" @{out['was']} is retired." if out.get("changed_handle") else ""))
+    return 0
 
 
 def stop(_args=None) -> int:
@@ -237,6 +267,8 @@ def setup_argparse(parser) -> None:
     en.add_argument("--all", action="store_true", help="Every profile, except any where you turned Annotary off")
     wk = subs.add_parser("wake", help="Let comments wake the chat that shared a Document")
     wk.add_argument("state", choices=["on", "off"])
+    nm = subs.add_parser("name", help="The name Annotary shows for you (and your handle, until you have one)")
+    nm.add_argument("name", nargs="+")
     subs.add_parser("doctor", help="Check and repair the install; Webapp settings")
     subs.add_parser("stop", help="Stop the private Annotary server")
     lg = subs.add_parser("logs", help="The server's log")
@@ -245,13 +277,13 @@ def setup_argparse(parser) -> None:
 
 
 COMMANDS = {"setup": setup, "status": status, "members": members, "enable": enable, "wake": wake,
-            "doctor": doctor, "stop": stop, "logs": logs}
+            "name": name, "doctor": doctor, "stop": stop, "logs": logs}
 
 
 def main(args) -> int:
     cmd = getattr(args, "annotary_command", None)
     if cmd not in COMMANDS:
-        print("usage: hermes annotary {setup|status|members|enable --all|enable PROFILE|wake on|off|doctor|stop|logs}")
+        print("usage: hermes annotary {setup|status|members|enable --all|enable PROFILE|wake on|off|name NAME|doctor|stop|logs}")
         return 1
     try:
         return COMMANDS[cmd](args) or 0

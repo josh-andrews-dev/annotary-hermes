@@ -54,6 +54,24 @@ def make_profile(root: Path, name: str, profile_yaml: str = "", *, annotary: boo
 @pytest.fixture()
 def hermes(tmp_path, monkeypatch):
     """A Hermes root (default + coder + bencha) with its private server running."""
+    yield from _hermes(tmp_path, monkeypatch)
+
+
+@pytest.fixture()
+def hermes_cloud(tmp_path, monkeypatch):
+    """The same, set up under the OS user ``hermes``, as on Hermes Cloud."""
+    monkeypatch.setattr(server.getpass, "getuser", lambda: "hermes")
+    yield from _hermes(tmp_path, monkeypatch)
+
+
+@pytest.fixture()
+def hermes_named(tmp_path, monkeypatch):
+    """The same, set up under a person's OS user (a CI runner's is a service account)."""
+    monkeypatch.setattr(server.getpass, "getuser", lambda: "rowan")
+    yield from _hermes(tmp_path, monkeypatch)
+
+
+def _hermes(tmp_path, monkeypatch):
     root = tmp_path / "hermes"
     for name in ("default", "coder", "bencha"):
         make_profile(root, name)

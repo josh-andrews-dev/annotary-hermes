@@ -43,6 +43,7 @@ def set_editor_for_handle(doc: str, handle: str, root: Path | None = None) -> di
 def read_threads(token: str, doc_id: str, *, open_only: bool = True) -> list[dict]:
     """A Document's Threads with every reply's body (``thread list`` has only the root's)."""
     raw = server.api(token, "GET", f"/api/v1/docs/{doc_id}/threads?status={'open' if open_only else 'all'}")
+    who = server.person_handle
     out = []
     for t in raw.get("threads") or []:
         if t.get("deleted"):
@@ -50,11 +51,11 @@ def read_threads(token: str, doc_id: str, *, open_only: bool = True) -> list[dic
         anchor = t.get("anchor") or {}
         cur, orig = anchor.get("current") or {}, anchor.get("original") or {}
         out.append({
-            "id": t.get("id"), "author": t.get("author"), "body": t.get("body"),
+            "id": t.get("id"), "author": who(t.get("author")), "body": t.get("body"),
             "where": (f"v{cur.get('version')}:{cur.get('range')} ({cur.get('status')}) \"{orig.get('exact', '')}\""
                       if cur.get("range") else t.get("subject") or "document"),
             "resolved": bool(t.get("resolved")),
-            "replies": [{"id": r.get("id"), "author": r.get("author"), "body": r.get("body")}
+            "replies": [{"id": r.get("id"), "author": who(r.get("author")), "body": r.get("body")}
                         for r in t.get("replies") or [] if not r.get("deleted")],
         })
     return out
