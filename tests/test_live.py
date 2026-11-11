@@ -320,7 +320,7 @@ def test_a_running_server_on_a_stale_binary_gets_the_pinned_one(hermes, monkeypa
 
 def running_command() -> str:
     import subprocess
-    return subprocess.run(["ps", "-p", str(server.server_pid()), "-o", "command="], capture_output=True,
+    return subprocess.run(["ps", "-ww", "-p", str(server.server_pid()), "-o", "command="], capture_output=True,
                           text=True).stdout.strip()
 
 
@@ -408,3 +408,15 @@ def test_dollar_amounts_render_as_text_not_math(hermes):
     with urllib.request.urlopen(req, timeout=30) as r:
         html = r.read().decode()
     assert "<math" not in html and "$1.00–1.25" in html and "~$120" in html, html
+
+
+def test_a_narrow_terminal_still_finds_and_upgrades_our_server(hermes, monkeypatch):
+    # #34: procps cuts `ps` output at $COLUMNS; the server's command line is longer than 80.
+    from annotary_hermes import install
+    monkeypatch.setenv("COLUMNS", "80")
+    monkeypatch.delenv(install.DEV_BINARY_ENV, raising=False)
+    pid = server.server_pid()
+    assert server._is_our_server(pid)
+    (install.bin_dir() / "SHA256").write_text("stale-pin\n")
+    out = server.ensure_running()
+    assert out["outcome"] == "started" and server.server_pid() != pid

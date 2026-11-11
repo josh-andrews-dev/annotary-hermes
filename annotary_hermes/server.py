@@ -286,7 +286,8 @@ def server_pid(root: Path | None = None) -> int | None:
 
 def _command(pid: int) -> str:
     try:
-        return subprocess.run(["ps", "-p", str(pid), "-o", "command="], capture_output=True, text=True,
+        # -ww: without it procps cuts the line at $COLUMNS, and the --data-dir check never matches.
+        return subprocess.run(["ps", "-ww", "-p", str(pid), "-o", "command="], capture_output=True, text=True,
                               timeout=5).stdout.strip()
     except (OSError, subprocess.SubprocessError):
         return ""
