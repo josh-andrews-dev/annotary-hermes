@@ -394,3 +394,17 @@ def test_a_cloned_profile_with_its_own_copy_is_reported(hermes):
     assert accounts.reconcile()["bot"] == "added @bot; " + enablement.SAY[enablement.COPY]
     assert enablement.link_plugin("bot") == "replaced its own copy with a link"
     assert accounts.reconcile() == {"bot": "Annotary is on in this profile"}
+
+
+def test_dollar_amounts_render_as_text_not_math(hermes):
+    # The pinned renderer must not let a `$` followed by a digit close inline math (#27).
+    import urllib.request
+    from annotary_hermes import paths
+    accounts.reconcile()
+    body = "# Price\n\nCost per pack is maybe $1.00–1.25 (a batch is 72 cookies out of a ~$120 shop).\n"
+    doc = tools.share(caller("coder"), markdown=body, name="Price")["id"]
+    req = urllib.request.Request(paths.server_url() + f"/api/v1/docs/{doc}/versions/1/html",
+                                 headers={"Authorization": f"Bearer {server.owner_token()}"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        html = r.read().decode()
+    assert "<math" not in html and "$1.00–1.25" in html and "~$120" in html, html
