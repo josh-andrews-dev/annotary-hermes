@@ -1,5 +1,15 @@
 # Annotary for Hermes Agent
 
+[![Demo: an agent shares a plan, a person comments and @mentions a Bot, the Bot answers, Send back, the agent pushes v2 (click to play)](docs/media/demo-poster.png)](docs/media/annotary-hermes-demo.mp4)
+
+*Demo, under 90 s: [docs/media/annotary-hermes-demo.mp4](docs/media/annotary-hermes-demo.mp4).*
+
+<p>
+  <img src="docs/media/document-with-threads.png" alt="A shared Document in the Annotary page, v2, with its resolved Threads" width="49%">
+  <img src="docs/media/agent-reply-in-thread.png" alt="A Bot's answer to an @mention in a Thread" width="49%">
+</p>
+<p><img src="docs/media/phone-webapp.png" alt="The same Document in the Webapp at phone width" width="240"></p>
+
 Annotary for Hermes Agent: review your agents' plans and documents with comments, from Desktop,
 the Webapp and your phone.
 
