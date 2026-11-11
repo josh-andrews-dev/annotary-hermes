@@ -222,11 +222,11 @@ def _webapp_notes(status_text: str) -> list[str]:
     """The public address when there is one, and the setup advice only for a Webapp not set up."""
     enabled, public = webapp.settings()
     if enabled or "Serving at" in status_text:
-        return [f"  Annotary links open the Annotary page at {public}/?annotary=<id>#/annotary?doc=<id>."] if public else []
+        return [f"  Annotary links open the Annotary page at {public}/?annotary=<id>."] if public else []
     return ["  Where Web Access cannot be switched on (a VPS, Docker, Hermes Cloud), set in config.yaml:",
             "    webapp:\n      enabled: true\n      public_url: https://<the HTTPS address you serve it at>",
             "  and a sign-in provider (see Hermes's docker.md, \"Behind a tunnel or reverse proxy\").",
-            "  Annotary links then open the Annotary page at <public_url>/?annotary=<id>#/annotary?doc=<id>."]
+            "  Annotary links then open the Annotary page at <public_url>/?annotary=<id>."]
 
 
 NAME_FIX = 'hermes annotary name "Your Name"'

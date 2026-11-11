@@ -21,7 +21,8 @@ def test_the_web_link_carries_the_document_in_the_query_so_sign_in_keeps_it(root
     """A server-side sign-in keeps only path and query (`next=`); the fragment is lost."""
     _public(root, "https://agent.example.test/")
     url = tools.links("nveriy5x")["webapp"]
-    assert url == "https://agent.example.test/?annotary=nveriy5x#/annotary?doc=nveriy5x"
+    # No `#/annotary` route: on a cold load the Webapp read it as a chat id and never loaded the page.
+    assert url == "https://agent.example.test/?annotary=nveriy5x" and "#" not in url
     kept = urllib.parse.urlsplit(url)
     assert urllib.parse.parse_qs(kept.query) == {webapp.LINK_PARAM: ["nveriy5x"]}
 
@@ -50,4 +51,4 @@ def test_a_chat_elsewhere_gets_the_web_link(root):
 
 def test_a_public_address_with_a_path_prefix_keeps_it_once():
     assert webapp.doc_url("nveriy5x", "https://h.example.test/hermes/") == \
-        "https://h.example.test/hermes/?annotary=nveriy5x#/annotary?doc=nveriy5x"
+        "https://h.example.test/hermes/?annotary=nveriy5x"
