@@ -399,9 +399,12 @@ def test_a_bot_chat_turn_that_ends_unknown_becomes_a_notification(hermes_cloud):
     assert failed == [1]
 
 
-# Hermes's gateway_chat._ENV_LAUNCH_FLAGS reads the last five into a new session's policy.
+# Approval markers; Hermes's gateway_chat._ENV_LAUNCH_FLAGS (YOLO plus the next four after the markers)
+# become a new session's policy; session_client_env.BEHAVIOUR_ENV (the last four) its frozen client_env.
 STRIPPED = ("HERMES_YOLO_MODE", "HERMES_CRON_SESSION", "HERMES_EXEC_ASK", "HERMES_GATEWAY_SESSION",
-            "HERMES_ACCEPT_HOOKS", "HERMES_IGNORE_RULES", "HERMES_SAFE_MODE", "HERMES_IGNORE_USER_CONFIG")
+            "HERMES_ACCEPT_HOOKS", "HERMES_IGNORE_RULES", "HERMES_SAFE_MODE", "HERMES_IGNORE_USER_CONFIG",
+            "HERMES_EPHEMERAL_SYSTEM_PROMPT", "HERMES_PREFILL_MESSAGES_FILE", "HERMES_INFERENCE_PROVIDER",
+            "HERMES_ENABLE_PROJECT_PLUGINS")
 
 
 def test_a_bot_chat_turn_never_inherits_yolo_or_the_gateways_approval_context(hermes_cloud, monkeypatch):

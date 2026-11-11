@@ -38,9 +38,12 @@ WAKE_FILE_TTL = 3600
 #: catalog rule 12 forbids a Hermes child that inherits YOLO, and the session/cron/ask markers would
 #: put the child in another approval context than the single-query one Hermes gives `chat -Q`.
 #: Hermes's `gateway_chat._ENV_LAUNCH_FLAGS` turns the child env's launch flags (yolo, ignore_rules,
-#: safe_mode, ignore_user_config, accept_hooks) into the new session's policy, so all of them stay out.
+#: safe_mode, ignore_user_config, accept_hooks) into the new session's policy, and
+#: `agent.session_client_env.BEHAVIOUR_ENV` (the last four) into its frozen `client_env`; all stay out.
 _APPROVAL_ENV = ("HERMES_YOLO_MODE", "HERMES_CRON_SESSION", "HERMES_EXEC_ASK", "HERMES_GATEWAY_SESSION",
-                 "HERMES_ACCEPT_HOOKS", "HERMES_IGNORE_RULES", "HERMES_SAFE_MODE", "HERMES_IGNORE_USER_CONFIG")
+                 "HERMES_ACCEPT_HOOKS", "HERMES_IGNORE_RULES", "HERMES_SAFE_MODE", "HERMES_IGNORE_USER_CONFIG",
+                 "HERMES_EPHEMERAL_SYSTEM_PROMPT", "HERMES_PREFILL_MESSAGES_FILE", "HERMES_INFERENCE_PROVIDER",
+                 "HERMES_ENABLE_PROJECT_PLUGINS")
 _APPROVAL_ENV_PREFIXES = ("HERMES_SESSION_",)
 
 
