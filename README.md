@@ -16,10 +16,12 @@ Needs Hermes 0.23.0 or newer, on macOS or Linux (WSL counts as Linux).
 ### In the app (the Webapp, or Hermes Desktop on the same machine as Hermes)
 
 1. **Capabilities → Plugins → Install from Git**, with `https://github.com/josh-andrews-dev/annotary-hermes`.
-   Hermes marks it Unverified (it is not in the catalog yet) and installs it for the profile selected
-   at the top of the tab.
-2. **Every other profile** whose Bot should use Annotary: select that profile and choose **Install
-   here** on the Annotary card.
+   Hermes marks it Unverified (it is not in the catalog yet); the dialog's "Install for profile"
+   picks the profile (start with the default one).
+2. **Every other profile** whose Bot should use Annotary: find the **Annotary** card (Filters →
+   Installed, or search "annotary"; the catalog is listed first), open it, pick that profile in the
+   card's profile menu, and choose **Install here**, then **Install**. The card closes when you
+   switch profiles: open it again.
 3. **Restart the gateway** (the status menu at the bottom left ("Backend ready") → Restart gateway), so the agents get the tools.
 4. **The page.** In the browser you installed from, Hermes turns it on (the card's **Desktop** switch).
    In any other browser it starts off: turn on that switch once there. An Annotary link opened where
@@ -30,6 +32,14 @@ Needs Hermes 0.23.0 or newer, on macOS or Linux (WSL counts as Linux).
    and any profile without the plugin. Answer it in the chat.
 
 A chat open while you turned the page on shows its Annotary card as plain text until you reload it.
+
+**Using it.** Open a Document from the card's **Open** button or the link. To comment, select some
+text: a **Comment** button appears. Type `@` to mention a Bot; with wake-ups on, it answers in that
+Thread. **Send back** wakes the editor to fix what you asked and push a new Version; it resolves the
+Threads it fixed, so on the new Version they are under the header's "resolved" filter (a Thread
+whose text was rewritten sits at the bottom, under "orphaned"). **Approve** wakes the editor too,
+to answer what is left; it pushes nothing. A Bot answers in the chat that shared the Document when
+Hermes can still reach it, otherwise in its own chat (the **Bots** list in the sidebar).
 
 ### Hermes Desktop connected to a remote Hermes (Hermes Cloud, a VPS)
 
@@ -51,14 +61,16 @@ hermes annotary wake on             # optional: let Send back, Approve and @ment
 
 1. **Stop the private server**: `hermes annotary stop` (or end the `annotary serve` on
    `127.0.0.1:7391`). Do this first: the command goes with the plugin.
-2. **Capabilities → Plugins → Annotary → Uninstall**, for each profile that has it (select the
-   profile at the top of the tab), then restart the gateway. Or in a terminal:
-   `hermes plugins remove annotary`, and `hermes -p NAME plugins remove annotary` for each profile.
-3. **Your Documents stay** until you delete them: `$HERMES_ROOT/annotary/` (the server, every
-   Document, the owner's secrets), `$HERMES_ROOT/desktop-plugins/annotary/`, and each profile's
-   `plugin-data/annotary/` (its Token).
-4. **Restart the gateway and the dashboard**, so neither keeps the plugin's code loaded (on Hermes
-   Cloud: `s6-svc -r /run/service/dashboard` in the instance's terminal).
+2. **Capabilities → Plugins → Annotary → Uninstall**, for each profile that has it (pick the
+   profile in the card's profile menu). Or in a terminal: `hermes plugins remove annotary`, and
+   `hermes -p NAME plugins remove annotary` for each profile.
+3. **Restart the gateway and the dashboard** before deleting anything: until they restart, the
+   plugin's code is still loaded and starts its server again (on Hermes Cloud the dashboard restarts
+   with `s6-svc -r /run/service/dashboard` in the instance's terminal).
+4. **Your Documents stay** until you delete them. In the Hermes home (`~/.hermes`; `/opt/data` on
+   Hermes Cloud): `annotary/` (the server, every Document, the owner's secrets),
+   `desktop-plugins/annotary/`, `plugin-data/annotary/` (the default profile's Token), and
+   `profiles/NAME/plugin-data/annotary/` for each other profile.
 
 After that, a fresh install starts over: the next share asks your name again.
 
