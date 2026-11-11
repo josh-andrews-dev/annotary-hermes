@@ -399,10 +399,17 @@ def test_a_bot_chat_turn_that_ends_unknown_becomes_a_notification(hermes_cloud):
     assert failed == [1]
 
 
+# Approval markers; Hermes's gateway_chat._ENV_LAUNCH_FLAGS (YOLO plus the next four after the markers)
+# become a new session's policy; session_client_env.BEHAVIOUR_ENV (the last four) its frozen client_env.
+STRIPPED = ("HERMES_YOLO_MODE", "HERMES_CRON_SESSION", "HERMES_EXEC_ASK", "HERMES_GATEWAY_SESSION",
+            "HERMES_ACCEPT_HOOKS", "HERMES_IGNORE_RULES", "HERMES_SAFE_MODE", "HERMES_IGNORE_USER_CONFIG",
+            "HERMES_EPHEMERAL_SYSTEM_PROMPT", "HERMES_PREFILL_MESSAGES_FILE", "HERMES_INFERENCE_PROVIDER",
+            "HERMES_ENABLE_PROJECT_PLUGINS")
+
+
 def test_a_bot_chat_turn_never_inherits_yolo_or_the_gateways_approval_context(hermes_cloud, monkeypatch):
     from annotary_hermes import watcher
-    for name in ("HERMES_YOLO_MODE", "HERMES_CRON_SESSION", "HERMES_EXEC_ASK", "HERMES_GATEWAY_SESSION",
-                 "HERMES_SESSION_KEY", "HERMES_SESSION_PLATFORM"):
+    for name in STRIPPED + ("HERMES_SESSION_KEY", "HERMES_SESSION_PLATFORM"):
         monkeypatch.setenv(name, "1")
     monkeypatch.setenv("HERMES_HOME", str(hermes_cloud))
     seen = []
@@ -415,6 +422,5 @@ def test_a_bot_chat_turn_never_inherits_yolo_or_the_gateways_approval_context(he
     assert watcher.wake_bot_chat("bencha", "[Annotary] x", spawn=spawn)
     env = seen[0]
     assert env is not None, "the child must get an explicit env, not the gateway's"
-    assert not [k for k in env if k in ("HERMES_YOLO_MODE", "HERMES_CRON_SESSION", "HERMES_EXEC_ASK",
-                                        "HERMES_GATEWAY_SESSION") or k.startswith("HERMES_SESSION_")]
+    assert not [k for k in env if k in STRIPPED or k.startswith("HERMES_SESSION_")]
     assert env["HERMES_HOME"] == str(hermes_cloud)  # everything else still passes through
