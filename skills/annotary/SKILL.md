@@ -6,7 +6,8 @@ description: Annotary reviews of your Markdown, reply on every Thread. Share a p
 # Annotary: reviews of what you write
 
 The person reviews your Markdown in Annotary: comments on exact lines, then **Send back** (fix it)
-or **Approve**. Use the `annotary_*` tools; never the `annotary` CLI through the terminal.
+or **Approve**. Use the `annotary_*` tools; never the `annotary` CLI through the terminal
+(`hermes annotary doctor` is another thing; see the end).
 
 ## The loop
 
@@ -15,6 +16,8 @@ or **Approve**. Use the `annotary_*` tools; never the `annotary` CLI through the
 2. Show it: in Hermes (Desktop or the Webapp) put the returned `card` line
    (`::annotary{doc="…"}`) on a paragraph of its own; elsewhere, or when asked for a link, give
    `links.webapp` exactly. Never build a link yourself. Pass on `tell_the_person` once if it is there.
+   The result has `setup_first` until Annotary is set up for the person: start your reply with
+   those steps. One asks their name: when they give it, `annotary_set_name`.
 3. **Wait.** A review is open while the person comments. Do not push, do not rewrite. You are
    woken when they Send back or Approve, or @mention you.
 4. Sent back: `annotary_threads`, fix what they asked, `annotary_push_version` **once** with the
@@ -47,8 +50,14 @@ of the 3 wake-ups between Bots allowed per Document per hour; so does a Send bac
 - `annotary_push_version` refuses mid-review; use `review_over: true` only when the person said
   in this chat that the review is over.
 - Quote Thread ids (`t3`) and text, not line numbers.
-- `annotary_list` shows every Document and any wake-ups you missed.
-- The card shows as plain text, or a link opens Hermes's home page? The Annotary page is off in
-  that browser (Hermes starts it off in each new one): tell the person to turn on Annotary in
-  Capabilities → Plugins. On an iPhone that page fails to load (Hermes 0.23), so say the Document
-  opens in Hermes Desktop or a computer's browser, and answer in chat until then.
+- `annotary_list` shows every Document, the person's handle (to @mention them), and any wake-ups
+  you missed. The person wants another name? `annotary_set_name`.
+
+## When something is off
+
+- The card shows as plain text, or a link opens Hermes's home page: the Annotary page is off in
+  that browser (Hermes starts it off in each new one). Tell the person to turn on Annotary in
+  Capabilities → Plugins; a link opened there offers an Open Plugins button.
+- Anything else (a Document that won't open, a tool error, no wake-up): run
+  `hermes annotary doctor` in a terminal, or ask the person to. It checks and repairs the install
+  and says what to do; pass that on.

@@ -12,6 +12,7 @@ import re
 import secrets
 import shutil
 import tempfile
+import time
 import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
@@ -140,6 +141,34 @@ def _wake_hint(c: Caller, root: Path | None) -> str | None:
             "Annotary tool call.")
 
 
+#: First-share setup: what the person does once so Annotary works for them (see _setup_steps).
+PAGE_SETUP = ("Annotary's page has not been switched on anywhere yet, so the card shows as plain text and "
+              "the Document cannot open. In the Webapp: open Capabilities → Plugins and turn on Annotary "
+              "(once in each new browser; Hermes Desktop turns it on by itself). Then reload.")
+NAME_SETUP = ("Annotary shows the person as @{handle} until they give a name. Ask what name it should show "
+              "for them, then call annotary_set_name with it. If they would rather not, leave it.")
+
+
+def _setup_steps(c: Caller, root: Path | None) -> list[str]:
+    """Setup the person still needs, said on a share: the page step until any browser or Desktop
+    has loaded the page; the name step until they give one, asked once per profile."""
+    def work(st: dict) -> list[str]:
+        steps = [] if st.get("page_seen_at") else [PAGE_SETUP]
+        asked = st.setdefault("name_asked", {})
+        if not server.owner_named(root) and not asked.get(c.profile):
+            asked[c.profile] = True
+            steps.append(NAME_SETUP.format(handle=server.owner_handle(root)))
+        return steps
+    return state.update(work, root)
+
+
+def record_page_seen(root: Path | None = None) -> None:
+    """The page registered somewhere (Desktop, or a browser where it is switched on)."""
+    def work(st: dict) -> None:
+        st["page_seen_at"] = time.time()
+    state.update(work, root)
+
+
 def _stem(name: str) -> str:
     """A file stem for *name*. Annotary names a new Document after its file's stem, verbatim, so
     only what a file name cannot hold is replaced."""
@@ -218,6 +247,11 @@ def share(c: Caller, *, path: str = "", markdown: str = "", name: str = "", mess
     out = {"id": doc_id, "name": pushed.get("name"), "version": pushed.get("version"),
            "editor": f"@{accounts.handle_of(c.profile, root)}", **_present(c, doc_id),
            "next": "Wait for the person's review. Do not push again until they Send back or Approve."}
+    steps = _setup_steps(c, root)
+    if steps:
+        out["setup_first"] = steps
+        out["setup_how"] = ("Start your reply with these setup steps for the person, in plain words, before "
+                            "the card. Annotary works for them once they are done.")
     hint = _wake_hint(c, root)
     if hint:
         out["tell_the_person"] = hint
@@ -416,4 +450,23 @@ def list_docs(c: Caller, *, root: Path | None = None) -> dict:
         if editor:
             row["editor"] = "@" + st["members"].get(editor, {}).get("handle", editor)
             row["you_are_editor"] = editor == c.profile
-    return {"you": f"@{accounts.handle_of(c.profile, root)}", "documents": rows}
+    me = accounts.person(root)
+    return {"you": f"@{accounts.handle_of(c.profile, root)}",
+            "person": {"handle": f"@{me['handle']}", "name": me["name"], "named": me["named"]},
+            "documents": rows}
+
+
+@_with_pending
+def set_name(c: Caller, *, name: str, root: Path | None = None) -> dict:
+    """The person's name, as they gave it in chat."""
+    _prepare(c, root)
+    try:
+        out = accounts.name_person(name, root)
+    except ValueError as e:
+        raise ToolError(str(e)) from None
+    said = f"The person is now @{out['handle']}, shown as {out['name']}."
+    if out.get("changed_handle"):
+        said += f" Their placeholder @{out['was']} is retired: @mention them as @{out['handle']}."
+    elif not server.slug(out["name"]):
+        said += " Their handle stays, because a handle is made from Latin letters and digits."
+    return {**{k: out[k] for k in ("handle", "name")}, "said": said}

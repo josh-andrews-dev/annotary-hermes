@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import json
 import re
+import secrets
 import time
+import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -277,3 +279,58 @@ def active_handles(root: Path | None = None) -> dict[str, str]:
 def handle_of(pid: str, root: Path | None = None) -> str | None:
     entry = state.load(root)["members"].get(pid)
     return entry["handle"] if entry else None
+
+
+MAX_NAME = 64
+
+
+def _ascii_slug(name: str) -> str:
+    folded = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()
+    return server.slug(folded)
+
+
+def person(root: Path | None = None) -> dict:
+    """The person's own Member: handle, display name, and whether they gave a name yet."""
+    handle = server.owner_handle(root)
+    name = ""
+    try:
+        name = _members(server.owner_token(root)).get(handle, {}).get("name") or ""
+    except server.ServerError:
+        pass
+    return {"handle": handle, "name": name, "named": server.owner_named(root)}
+
+
+def name_person(name: str, root: Path | None = None) -> dict:
+    """Give the person the *name* they chose. Handles never change, so while they still have
+    setup's placeholder (``@owner``, or a service account's name) they get a new owner Member with
+    a handle made from the name; the placeholder is renamed too (its Comments read as theirs) and
+    disabled. Once named, a new name changes only the display name. Returns ``person()``'s shape."""
+    name = " ".join((name or "").split())
+    if not name or len(name) > MAX_NAME:
+        raise ValueError(f"give a name of 1 to {MAX_NAME} characters")
+    with state.locked("owner", root):
+        old_tok, old = server.owner_token(root), server.owner_handle(root)
+        remote = _members(old_tok)
+        want = _ascii_slug(name)
+        if server.owner_named(root) or not want or want == old:
+            server.api(old_tok, "POST", "/api/v1/me/rename", {"name": name})
+            server.update_secrets({"owner_named": True}, root)
+            return {"handle": old, "name": name, "named": True, "changed_handle": False}
+        handle, n = want, 2
+        while handle in remote:
+            handle = f"{want}-{n}"
+            n += 1
+        tok = _add_member(old_tok, handle, name, root)
+        r = server.run_cli(old_tok, ["member", "role", handle, "owner"], root=root)
+        if r.returncode != 0:
+            raise server.ServerError(f"member role @{handle} owner: {r.stderr.strip()[-200:]}")
+        # A password closes loopback trust, and it must stay closed once the placeholder (which
+        # holds setup's password) is disabled: give the new owner one first.
+        password = secrets.token_urlsafe(32)
+        server.api(tok, "PUT", "/api/v1/settings/password", {"password": password})
+        server.update_secrets({"owner_handle": handle, "owner_token": tok, "owner_password": password,
+                               "owner_named": True,
+                               "previous_owners": [*server.previous_owners(root), old]}, root)
+        server.run_cli(tok, ["member", "rename", old, name], root=root)
+        server.api(tok, "POST", f"/api/v1/members/{old}/disable", {})
+        return {"handle": handle, "name": name, "named": True, "changed_handle": True, "was": old}

@@ -49,13 +49,15 @@ handed to a Bot whose profile has Annotary off.
   one is disabled (its comments keep their author), and a profile made again under the same name
   gets the same Member back, enabled, with a new Token (the old one stays revoked). Each Bot's handle is its Bot Mode tag
   (`@coder`; the default profile is `@hermes` until you name it). You are the owner, named after
-  your OS user. `hermes annotary members` shows the mapping.
+  your OS user; where that is a service account (Hermes Cloud runs as `hermes`), you are `@owner`
+  until you give a name. The agent's first share asks for it, and `hermes annotary name "Your Name"`
+  sets it too: while you have no name it also makes your handle (`@rowan`). `hermes annotary members` shows the mapping.
 - **Each Bot's face next to its comments**: the Bot Mode face from Desktop, animated when Desktop
   animates it and still under reduced motion. A change to a Bot's face reaches Annotary within
   5 minutes.
 - **Native tools** (no approval prompts, and they work in profiles with no terminal):
   `annotary_share`, `annotary_read`, `annotary_comment`, `annotary_threads`, `annotary_reply`, `annotary_push_version`,
-  `annotary_handoff`, `annotary_act`, `annotary_list`, and a skill, `annotary`.
+  `annotary_handoff`, `annotary_act`, `annotary_list`, `annotary_set_name`, and a skill, `annotary`.
 - **The Annotary page**: the Document list, then the Document itself: Annotary's own page in a
   sandboxed frame (Annotary's embed mode), fed through this plugin's backend, so it
   works on native Desktop, Desktop over SSH and the Webapp on a phone. Above it, the Document's
@@ -104,11 +106,10 @@ Disclosed per the Hermes plugin catalog rules. Nothing leaves the machine except
 **Turning the page on in a browser.** Hermes starts a plugin's page switched off in each new
 browser, so in the Webapp turn on **Annotary** once in Capabilities → Plugins. Native Desktop turns
 it on when the plugin is installed. An Annotary link opened in a browser where the page is off shows
-a notice with an **Open Plugins** button, and the Document opens once you turn it on. On Hermes 0.23
-the Capabilities page fails in Safari, and every iPhone browser uses Safari's engine, so on an
-iPhone the page cannot be turned on until Hermes fixes that. The chat cards are drawn by the page,
-so they show there as plain text too; the agent's tools still work, and the agent knows to say the
-Document opens in Desktop or a computer's browser.
+a notice with an **Open Plugins** button, and the Document opens once you turn it on; on a phone
+too. Until then the chat cards, which the page draws, show as plain text. The agent's first share
+tells you to do this until the page has loaded somewhere, and `hermes annotary doctor` says whether
+it has.
 
 An earlier version of this plugin copied its page in by hand with no package marker; its setup step
 now removes that copy, so Hermes can put the plugin's own page in its place.

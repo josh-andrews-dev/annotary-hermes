@@ -489,6 +489,8 @@ export default {
     registered = true
     rest = ctx.rest
     os = ctx.os
+    // Tells the agent's first share that the page is on somewhere, so it skips that setup step.
+    Promise.resolve().then(() => rest('/seen', { method: 'POST', body: {} })).catch(() => {})
     const linked = typeof window === 'undefined' ? null : takeLinked(window.sessionStorage, Date.now())
     if (linked && hashDoc() !== linked) host.navigate(`${PATH}?doc=${linked}`)
     ctx.registerMany([

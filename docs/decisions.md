@@ -209,3 +209,27 @@ is in the maintainer's private plan.
 - **The Webapp cannot show itself in Hermes's browser pane**: it sends `frame-ancestors 'none'`. So
   in Hermes the agent shows the card, whose Open button navigates in the app, and gives the web
   link only when asked or outside Hermes.
+
+## 2026-11-11: the person's name, and setup on the first share
+
+- **A service account's person starts as `@owner`.** Chose the placeholder `@owner` ("Owner") when
+  the OS user names a machine or service (`server.SERVICE_USERS`; Hermes Cloud runs as `hermes`);
+  rejected naming the person after it, because they then read as "hermes" beside the default Bot,
+  which became `@hermes-agent`, and an @mention of `@hermes` reached the person, not the Bot.
+- **Naming makes a real handle once.** Handles never change, so while the person has the
+  placeholder, `annotary_set_name` (or `hermes annotary name`) adds a new owner Member with a handle
+  made from the name, gives it a fresh local password (disabling the placeholder, which holds
+  setup's, would otherwise reopen loopback trust), switches the plugin's owner Token to it, renames
+  the placeholder to the same name (its Comments read as the person's) and disables it. Once named,
+  a new name changes only the display name. Rejected renaming only the display name, because
+  @mentions of the person would stay `@owner`.
+- **The first share leads with setup.** Chose a share that goes through and returns
+  `setup_first`: the page step until the page has registered in Desktop or any browser (it posts
+  `/seen`), and the name step once per profile until the person has a name. Rejected holding the
+  share until the page is on, because the plugin cannot tell which browser the person is in, and it
+  costs a round trip. Drift later is fixed through the skill's "When something is off" and
+  `hermes annotary doctor`.
+- **Correction to 2026-11-10: phones work.** A real iPhone turns the page on through a link's
+  notice (Open Plugins goes straight to the Plugins tab). The Safari failure was seen in the
+  Simulator opening Capabilities on its first tab.
+
