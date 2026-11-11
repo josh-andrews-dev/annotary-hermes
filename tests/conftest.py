@@ -64,6 +64,13 @@ def hermes_cloud(tmp_path, monkeypatch):
     yield from _hermes(tmp_path, monkeypatch)
 
 
+@pytest.fixture()
+def hermes_named(tmp_path, monkeypatch):
+    """The same, set up under a person's OS user (a CI runner's is a service account)."""
+    monkeypatch.setattr(server.getpass, "getuser", lambda: "rowan")
+    yield from _hermes(tmp_path, monkeypatch)
+
+
 def _hermes(tmp_path, monkeypatch):
     root = tmp_path / "hermes"
     for name in ("default", "coder", "bencha"):

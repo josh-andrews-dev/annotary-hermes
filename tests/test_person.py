@@ -26,8 +26,8 @@ def test_a_service_account_install_makes_the_person_a_placeholder_not_the_bots_n
     assert accounts.handle_of("default") == "hermes"
 
 
-def test_a_named_os_user_is_the_person_and_is_never_asked(hermes):
-    assert server.owner_named()
+def test_a_named_os_user_is_the_person_and_is_never_asked(hermes_named):
+    assert server.owner_named() and server.owner_handle() == "rowan"
     out = tools.share(caller("coder"), markdown="# Plan\n", name="Plan")
     assert not any("annotary_set_name" in s for s in out.get("setup_first", []))
 
