@@ -366,7 +366,7 @@ def test_doctor_still_fails_a_fresh_profile_and_a_clone(hermes, fake_hermes, cap
     cli.enable(Namespace(all=True, profile=None))
     _clone_of_default(hermes, "bot")
     assert cli.doctor() == 1
-    assert "FAIL profile bot runs its own copy" in capsys.readouterr().out
+    assert "FAIL profile bot runs a different copy" in capsys.readouterr().out
 
 
 def test_reconcile_says_when_a_declined_profile_comes_back(hermes, fake_hermes):

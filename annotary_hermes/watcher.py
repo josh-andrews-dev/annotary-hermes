@@ -9,6 +9,10 @@ from __future__ import annotations
 
 import json
 import logging
+import secrets
+import shutil
+import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -21,6 +25,74 @@ POLL_WAIT = 25  # seconds a long-poll parks (Annotary caps it at 30)
 
 Inject = Callable[[str, str], bool]  # (text, session_key) -> accepted
 Broadcast = Callable[[str, dict], None]  # (event name, payload)
+
+
+#: Hermes's own route for a programmatic message to a profile's Bot: `chat -c TITLE --create-if-missing`
+#: runs one turn in that titled chat, creating it if needed (Bot Mode's agent-to-agent DMs use it too).
+BOT_CHAT = "Bot Chat"
+WAKE_FILE_TTL = 3600
+
+
+def _hermes_argv() -> list[str]:
+    exe = shutil.which("hermes")
+    return [exe] if exe else [sys.executable, "-m", "hermes_cli.main"]
+
+
+_bot_chats: dict[str, subprocess.Popen] = {}  # profile -> its running Bot Chat turn
+_bot_chats_lock = threading.Lock()
+
+
+def wake_bot_chat(profile: str, text: str, root: Path | None = None, *, spawn=subprocess.Popen,
+                  on_fail: Callable[[], None] | None = None) -> bool:
+    """Run one turn of *profile*'s Bot in its "Bot Chat" with *text*: for a Bot Hermes has no live
+    chat of to inject into (it never used Annotary). Callers check the person's consent first.
+
+    One turn per Bot at a time: while one runs, this returns False (the wake stays a notification).
+    A turn that exits nonzero calls *on_fail*, so the wake is not lost."""
+    folder = paths.app_dir(root) / "wakes"
+    with _bot_chats_lock:
+        running = _bot_chats.get(profile)
+        if running is not None and running.poll() is None:
+            return False
+        folder.mkdir(parents=True, exist_ok=True)
+        now = time.time()
+        for old in folder.glob("*.txt"):  # left by a crash; a running turn's file is newer
+            try:
+                if now - old.stat().st_mtime > WAKE_FILE_TTL:
+                    old.unlink()
+            except OSError:
+                pass
+        query = folder / f"{profile}-{secrets.token_hex(6)}.txt"
+        query.write_text(text, encoding="utf-8")
+        try:
+            child = spawn([*_hermes_argv(), "-p", profile, "chat", "--in", str(Path.home()), "-c", BOT_CHAT,
+                           "--create-if-missing", "-Q", "--query-file", str(query)],
+                          stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                          start_new_session=True)
+        except OSError as e:
+            query.unlink(missing_ok=True)
+            log.warning("annotary: could not wake %s in its Bot Chat: %s", profile, e)
+            return False
+        _bot_chats[profile] = child
+
+    def reap() -> None:
+        err = b""
+        try:
+            _, err = child.communicate()
+            failed = bool(child.returncode)
+        except Exception as e:  # noqa: BLE001 — an unknown end counts as a failed turn
+            failed, err = True, str(e).encode()
+        query.unlink(missing_ok=True)
+        with _bot_chats_lock:
+            if _bot_chats.get(profile) is child:
+                del _bot_chats[profile]
+        if failed:
+            log.warning("annotary: %s's Bot Chat turn failed (exit %s): %s", profile, child.returncode,
+                        (err or b"").decode("utf-8", "replace").strip()[-300:])
+            if on_fail:
+                on_fail()
+    threading.Thread(target=reap, name=f"annotary-botchat-{profile}", daemon=True).start()
+    return True
 
 
 def head_seq(tok: str) -> int:
@@ -67,14 +139,18 @@ def message_for(w: rules.Wake, *, me: str, digest: str) -> str:
         return f"[Annotary] @{w.by} chose {label} on {title}.\n{digest}\n{todo}"
     return (f"[Annotary] @{w.by} mentioned you (@{me}) in Thread {w.thread} on {title}: \"{w.excerpt}\"\n"
             f"Read it with annotary_threads and answer in that Thread with annotary_reply: the answer, or a "
-            "question back if it is unclear. Do not push a new Version: you are answering, not editing.")
+            "question back if it is unclear. Do not push a new Version: you are answering, not editing. "
+            "Do not resolve the Thread (it is the asker's), and @mention another Bot only to ask it to act.")
 
 
 class Watcher:
     def __init__(self, profile: str, inject: Inject, broadcast: Optional[Broadcast] = None,
-                 root: Path | None = None):
+                 root: Path | None = None, *, allowed: Callable[[], bool] = lambda: False,
+                 bot_chat: Callable[..., bool] = wake_bot_chat):
         self.profile = profile
         self.inject = inject
+        self.allowed = allowed  # the person's consent to wake this profile (allow_gateway_injection)
+        self.bot_chat = bot_chat
         self.broadcast = broadcast
         self.root = root
         self.stop = threading.Event()
@@ -129,19 +205,32 @@ class Watcher:
         ok = False
         try:
             ok = bool(self.inject(text, key))
+            # No live chat of this Bot (it never used Annotary, or that chat is gone): its Bot Chat.
+            if not ok and self._consented():
+                ok = bool(self.bot_chat(self.profile, text, self.root, on_fail=lambda: self._notify(w, me)))
         except Exception as e:  # noqa: BLE001 — a failed wake must not stop the watcher
             log.warning("annotary: wake for %s failed: %s", self.profile, e)
         if not ok:
-            def queue(s: dict) -> None:
-                s["pending"].setdefault(self.profile, []).append(
-                    {"reason": w.reason, "doc": w.doc, "name": w.name, "by": w.by, "action": w.action,
-                     "thread": w.thread, "excerpt": w.excerpt, "seq": w.seq})
-                s["pending"][self.profile] = s["pending"][self.profile][-20:]
-            state.update(queue, self.root)
-            if self.broadcast:
-                self.broadcast("notify", {"doc": w.doc, "name": w.name, "reason": w.reason, "by": w.by,
-                                          "action": w.action, "profile": self.profile, "bot": me})
+            self._notify(w, me)
         return self._record(w, "woke" if ok else "notified", key)
+
+    def _consented(self) -> bool:
+        try:
+            return bool(self.allowed())
+        except Exception:  # noqa: BLE001 — unknown consent is no consent
+            return False
+
+    def _notify(self, w: rules.Wake, me: str) -> None:
+        """Keep *w* for the Bot's next tool call, and tell open windows."""
+        def queue(s: dict) -> None:
+            s["pending"].setdefault(self.profile, []).append(
+                {"reason": w.reason, "doc": w.doc, "name": w.name, "by": w.by, "action": w.action,
+                 "thread": w.thread, "excerpt": w.excerpt, "seq": w.seq})
+            s["pending"][self.profile] = s["pending"][self.profile][-20:]
+        state.update(queue, self.root)
+        if self.broadcast:
+            self.broadcast("notify", {"doc": w.doc, "name": w.name, "reason": w.reason, "by": w.by,
+                                      "action": w.action, "profile": self.profile, "bot": me})
 
     def _record(self, w: rules.Wake, outcome: str, key: str) -> dict:
         rec = {"at": time.time(), "profile": self.profile, "reason": w.reason, "doc": w.doc, "by": w.by,

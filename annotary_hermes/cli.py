@@ -65,7 +65,7 @@ def members(_args=None) -> int:
         tok = "token ok" if accounts.token_for(pid) else "no token"
         plugin = "" if m.get("disabled") else ", " + {
             enablement.ON: "Annotary on", enablement.OFF: "Annotary OFF",
-            enablement.COPY: "Annotary on (own copy)",
+            enablement.COPY: "Annotary on (different copy)",
             enablement.DECLINED: "Annotary off (your choice)"}[enablement.plugin_state(pid)]
         if plugin.endswith(("OFF", "copy)")):
             off.append(pid)
@@ -147,7 +147,7 @@ def wake(args) -> int:
         key = f"plugins.entries.{paths.PLUGIN_ID}.allow_gateway_injection"
         r = _run_hermes(["-p", pid, "config", "set", key, "true" if on else "false"])
         print(f"{pid}: {'on' if on else 'off'}" if r.returncode == 0 else f"{pid}: failed {r.stderr.strip()[-200:]}")
-    print("Comments on shared Documents now wake the chat that shared them (Send back, Approve, @mentions)."
+    print("Send back, Approve and @mentions now wake the Bot (a plain comment wakes nobody)."
           if on else "Wake-ups are off: Send back, Approve and @mentions show as notifications instead.")
     return 0
 
@@ -193,7 +193,7 @@ def doctor(_args=None) -> int:
         plugin = enablement.plugin_state(pid)
         what = {enablement.ON: f"Annotary tools and skill on in profile {pid}",
                 enablement.OFF: f"Annotary is off in profile {pid}: its agent has no Annotary tools or skill",
-                enablement.COPY: f"profile {pid} runs its own copy of the plugin (cloned), which updates never reach",
+                enablement.COPY: f"profile {pid} runs a different copy of the plugin than the default profile's, which updates do not reach",
                 enablement.DECLINED: f"Annotary is off in profile {pid}, as you chose (to turn it on: "
                                      f"{enablement.turn_on(pid)})"}
         check(plugin in (enablement.ON, enablement.DECLINED), what[plugin], enablement.FIX)

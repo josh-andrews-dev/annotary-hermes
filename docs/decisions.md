@@ -246,3 +246,20 @@ is in the maintainer's private plan.
   page never loaded: no Document, and with the page off no notice either. The page reads the query
   at load and opens the Document when it registers.
 
+## 2026-11-11: what a UI install on Hermes Cloud needed
+
+- **A Bot with no chat on record is woken in its "Bot Chat".** Chose Hermes's own programmatic route,
+  `hermes -p <profile> chat -c "Bot Chat" --create-if-missing -Q --query-file <file>` (Bot Mode's
+  agent-to-agent DMs use it), only when the person allowed wake-ups for that profile; rejected
+  leaving it a notification, because an @mention of a Bot that never used Annotary then never
+  reached it: Hermes refuses a key-less `inject_message` from a plugin's thread.
+- **A profile's own install is on when its code matches the default profile's.** Hermes's
+  "Install here" puts a real folder in each profile, so only one whose plugin files differ (a clone
+  made before an update) is a different copy; rejected treating every non-link folder as stale, which
+  told a Webapp-only person to run a terminal command.
+- **A Bot's reply wakes no Bot.** Two Bots acknowledging each other in a Thread ("agreed with
+  @hermes") woke each other until the cap, and the editor resolved the person's Thread meant for
+  the other Bot. Chose: only the person's comments and replies, a Bot's new comment, and a Send back
+  wake a Bot, and a mention wake says not to resolve the asker's Thread; rejected a lower cap,
+  which would still spend the person's turns on chatter.
+

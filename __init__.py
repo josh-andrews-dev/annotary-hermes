@@ -177,6 +177,9 @@ def _start_watcher(ctx) -> None:
 
     profile = ctx.profile_name  # captured here: a thread started from register() sees `default`
 
+    def allowed() -> bool:  # the person's consent for this profile, read from its own config
+        return bool(ctx._gateway_injection_allowed())
+
     def inject(text: str, session_key: str) -> bool:
         if session_key:
             return bool(ctx.inject_message(text, session_key=session_key))
@@ -191,7 +194,7 @@ def _start_watcher(ctx) -> None:
         except Exception as e:  # noqa: BLE001
             log.debug("annotary: broadcast failed: %s", e)
 
-    w = watcher.Watcher(profile, inject, broadcast)
+    w = watcher.Watcher(profile, inject, broadcast, allowed=allowed)
     w.start()
     try:
         ctx.on_unload(w.stop.set)

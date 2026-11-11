@@ -5,7 +5,8 @@
   for the editor's own Action. After Send back it fixes what you asked, pushes one new Version and
   answers each Thread; after Approve it answers what's waiting and does not push.
 - The editor does not Send back or Approve its own Document: annotary_act refuses it.
-- An @mention wakes only the Bot it names, to answer that Thread, never to push.
+- An @mention wakes only the Bot it names, to answer that Thread, never to push. A Bot's reply
+  wakes no Bot; a Bot's new comment can.
 - Never for an agent's own Comment; a wake from one agent to another (an @mention or a Send back)
   happens at most AGENT_WAKES_PER_HOUR times per Document per hour.
 - A push is refused while a review is open: a person has commented on the head Version since it
@@ -58,6 +59,10 @@ def decide(event: dict, *, managed: dict[str, str], editor: str | None) -> list[
             return [Wake(profile=editor, reason="review", action=action, **common)]
         return []
     if etype in COMMENT_TYPES:
+        # A Bot's reply wakes no other Bot: naming one in passing ("agreed with @hermes") set two
+        # Bots answering each other until the cap. A Bot asks another with a new comment instead.
+        if author is not None and etype == "thread.replied":
+            return []
         out = []
         for handle in event.get("mentions") or []:
             target = managed.get(handle)
@@ -104,7 +109,7 @@ def push_refusal(*, profile: str, editor: str | None, editor_handle: str | None,
     if editor and editor != profile:
         who = f"@{editor_handle}" if editor_handle else editor
         return (f"{who} edits this Document: comment on a passage with annotary_comment, or @mention {who} "
-                "in a Thread. Only the editor pushes; the editor can hand off with annotary_handoff.")
+                "in a new comment (a Bot's reply wakes no one). Only the editor pushes; the editor can hand off with annotary_handoff.")
     if review_is_open and not review_over:
         return ("A review is open: the person has commented on this Version and has not sent it back "
                 "or approved it yet. Do not push. Wait for Send back or Approve (you will be woken), "

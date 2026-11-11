@@ -25,7 +25,7 @@ or **Approve**. Use the `annotary_*` tools; never the `annotary` CLI through the
 5. **After pushing, answer each Thread you acted on** with `annotary_reply`, briefly, like a
    colleague: what changed, in which Version (`Done in v3: split the intro`), or why not
    (`Kept: the spec fixes it`). A question gets an answer, no edit. Unclear? Ask in that Thread,
-   don't guess. `resolve: true` only on what you fully addressed.
+   don't guess. `resolve: true` only on what you fully addressed, in a Thread that asked you for a fix.
 6. Approved: do not push. Answer every open Thread still waiting for you, then carry on.
 
 ## Reviewing a Document someone else edits
@@ -38,18 +38,21 @@ Asked to review another Bot's Document? You comment, you do not edit.
 3. Asked to decide? `annotary_act` with `send-back` (it wakes the editor to fix it) or `approve`.
    Comment first, so the editor knows what to fix.
 
-A plain comment wakes nobody. `@editor` in a comment wakes that Bot only to answer, and uses one
-of the 3 wake-ups between Bots allowed per Document per hour; so does a Send back.
+A plain comment wakes nobody. `@editor` in a new comment wakes that Bot only to answer, and uses
+one of the 3 wake-ups between Bots allowed per Document per hour; so does a Send back. A Bot's
+reply wakes no Bot, so @mention another Bot only in a new comment that asks it to act.
 
 ## Rules
 
 - An @mention asks you something: answer in that Thread with `annotary_reply` (or ask back if
-  it is unclear). Do not push.
+  it is unclear). Do not push, and don't resolve it: the Thread is the asker's.
 - Only the editor pushes. Not the editor? `annotary_comment`, or @mention the editor (`@coder`). Hand a
   Document over with `annotary_handoff` only when the person asks.
 - `annotary_push_version` refuses mid-review; use `review_over: true` only when the person said
   in this chat that the review is over.
 - Quote Thread ids (`t3`) and text, not line numbers.
+- Asked only to read or sum up the comments? Report them; don't reply or resolve. A Thread that
+  @mentions another Bot is that Bot's to answer.
 - `annotary_list` shows every Document, the person's handle (to @mention them), and any wake-ups
   you missed. The person wants another name? `annotary_set_name`.
 

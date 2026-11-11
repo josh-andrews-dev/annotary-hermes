@@ -10,6 +10,7 @@ plugin off stays off: only `hermes annotary enable <profile>` brings it back.
 
 from __future__ import annotations
 
+import hashlib
 import re
 import secrets
 import shutil
@@ -97,7 +98,29 @@ def plugin_state(pid: str, root: Path | None = None) -> str:
         return DECLINED
     if pid == "default" or here.is_symlink() or here.parent.is_symlink():
         return ON
-    return COPY
+    # Its own folder: Hermes's per-profile install ("Install here") puts one there too. Only one
+    # whose code differs from the default profile's install (or, with none there, this package) is a
+    # different copy, which a plugin update does not reach.
+    main = paths.profile_home("default", root) / "plugins" / paths.PLUGIN_ID
+    if not _is_this_plugin(main):  # installed only in other profiles: compare with this running package
+        main = paths.package_dir()
+    return ON if fingerprint(here) == fingerprint(main) else COPY
+
+
+#: The files that make the plugin's behavior; equal fingerprints mean the same plugin code.
+_CODE_GLOBS = ("plugin.yaml", "__init__.py", "annotary_hermes/*.py", "dashboard/*.py", "desktop/*.js",
+               "skills/annotary/SKILL.md")
+
+
+def fingerprint(folder: Path) -> str:
+    h = hashlib.sha256()
+    for pattern in _CODE_GLOBS:
+        for f in sorted(folder.glob(pattern)):
+            try:
+                h.update(f.relative_to(folder).as_posix().encode() + b"\0" + f.read_bytes() + b"\0")
+            except OSError:
+                h.update(b"?")
+    return h.hexdigest()
 
 
 def has_annotary(state: str) -> bool:
@@ -169,5 +192,5 @@ def turn_on(pid: str) -> str:
 
 SAY = {
     OFF: f"Annotary is off in this profile (its agent has no Annotary tools or skill): run `{FIX}`",
-    COPY: f"this profile runs its own copy of the plugin, which updates never reach: run `{FIX}`",
+    COPY: f"this profile runs a different copy of the plugin than the default profile's, which updates do not reach: run `{FIX}`",
 }
