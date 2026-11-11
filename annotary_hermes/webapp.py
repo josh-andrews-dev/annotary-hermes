@@ -1,9 +1,9 @@
 """The Webapp's address, and the web link to a Document's Annotary page.
 
-The link carries the Document twice: `?annotary=ID` for the page script and `#/annotary?doc=ID`
-for the route. A server-side sign-in (Hermes Cloud's, the Webapp's own) only sees the path and
-query and drops the fragment, so after signing in only the query is left; the page reads it
-(`desktop/plugin.js`, `linkedDoc`).
+The link carries the Document in the query only, `?annotary=ID`, which the page script reads
+(`desktop/plugin.js`, `linkedDoc`) and opens once the page registers. Never add the page's route
+(`#/annotary?doc=ID`): on a cold load the Webapp reads it as a chat id before plugins load, so the
+page never loads. A server-side sign-in keeps the query and drops any fragment anyway.
 """
 
 from __future__ import annotations
@@ -40,5 +40,4 @@ def doc_url(doc: str, public: str | None = None) -> str | None:
     public = (public or "").rstrip("/")
     if not public:
         return None
-    q = urllib.parse.urlencode({"doc": doc})
-    return f"{public}/?{urllib.parse.urlencode({LINK_PARAM: doc})}#/annotary?{q}"
+    return f"{public}/?{urllib.parse.urlencode({LINK_PARAM: doc})}"

@@ -238,3 +238,11 @@ is in the maintainer's private plan.
   shell's one-time `annotary-ready`, so every Document after the first never loaded
   (`attachFrame` in `desktop/plugin.js`).
 
+## 2026-11-11: the web link is the query alone
+
+- **Chose `<public_url>/?annotary=ID`; rejected adding the route `#/annotary?doc=ID`** (2026-11-11
+  above). On Hermes Cloud a cold load of that route made the Webapp read `annotary` as a chat id
+  (`/api/sessions/annotary/messages`, 404) and fall back to `#/` before any plugin loaded, so the
+  page never loaded: no Document, and with the page off no notice either. The page reads the query
+  at load and opens the Document when it registers.
+

@@ -136,9 +136,8 @@ Webapp on in `config.yaml` (`webapp.enabled`, `webapp.public_url`, a sign-in pro
 `hermes annotary doctor` prints the exact block.
 
 With `webapp.public_url` set, each share returns a full link to the Document,
-`<public_url>/?annotary=<id>#/annotary?doc=<id>`. A sign-in (Hermes Cloud's, or the Webapp's own) keeps
-only the address's path and query, so the Document is in the query too and the page opens it after
-you sign in. Without `public_url` there is no web link, and the agent says so.
+`<public_url>/?annotary=<id>`. The page opens that Document once it loads, also after a sign-in
+(Hermes Cloud's, or the Webapp's own), which keeps the address's query. Without `public_url` there is no web link, and the agent says so.
 
 A sign-in link signs in only the tab that opened it, because Hermes keeps the grant in that tab's
 `sessionStorage`. So on a Webapp with only sign-in links, an Annotary link opened in a new tab lands
