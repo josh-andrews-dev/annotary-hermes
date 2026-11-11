@@ -187,3 +187,25 @@ is in the maintainer's private plan.
   `read_package_marker` requires), and not byte-equal to the current half (Hermes adopts that copy
   itself). A failed removal is left for `doctor` to report; any other folder is left alone.
 
+
+## 2026-11-11: links that reach the Document on Hermes Cloud
+
+- **A share returns the full web link, never a bare route.** Chose `links.webapp`, built from
+  `webapp.public_url`; rejected the old `webapp_path` (`#/annotary?doc=…`), because an agent on
+  Hermes Cloud completed it with the dashboard's origin, which has no Annotary page. With no public
+  address there is no web link, and the agent is told to say so rather than make one.
+- **The link carries the Document in the query as well as the route**
+  (`/?annotary=ID#/annotary?doc=ID`). Hermes Cloud's sign-in, like the Webapp's own, sees only path
+  and query and returns to `next=/`, so a route-only link lost the Document. Rejected a dashboard
+  page at `/annotary`, which survives sign-in too, because it would be a second page to build and
+  keep in step with the desktop one.
+- **A link opened where the page is off says so.** Hermes evaluates `plugin.js` even for a page
+  switched off and only skips `register()`. So the module notes the linked Document, and when
+  `register()` has not run three seconds later it shows a notice with an Open Plugins button
+  (`/capabilities?tab=plugins`, the SDK's door for this). The Document opens when the page is
+  turned on in that tab, for ten minutes. Rejected turning the page on from the module, because the
+  switch is the person's (`host.pluginDecisions` is read-only on purpose), and rejected going back to
+  the standalone copy (2026-11-10).
+- **The Webapp cannot show itself in Hermes's browser pane**: it sends `frame-ancestors 'none'`. So
+  in Hermes the agent shows the card, whose Open button navigates in the app, and gives the web
+  link only when asked or outside Hermes.

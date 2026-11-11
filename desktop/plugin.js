@@ -85,31 +85,33 @@ let registered = false
 // Hermes imports this module even while the page is switched off and then skips register(), and a
 // package's page starts off in each new browser. So a link opened there would land on Hermes's home
 // page with no word why: say so, and offer the switch (enabling stays the person's choice).
-function bootLink() {
-  if (typeof window === 'undefined' || !window.location) return
-  const doc = linkedDoc(window.location.search, window.location.hash)
+export function bootLink(win, sdk, isRegistered, later = setTimeout) {
+  if (!win || !win.location) return
+  const doc = linkedDoc(win.location.search, win.location.hash)
   if (!doc) return
-  keepLinked(window.sessionStorage, doc, Date.now())
-  if (new URLSearchParams(window.location.search).has(LINK_PARAM)) {
+  keepLinked(win.sessionStorage, doc, Date.now())
+  if (new URLSearchParams(win.location.search).has(LINK_PARAM)) {
     try {
-      const u = new URL(window.location.href)
+      const u = new URL(win.location.href)
       u.searchParams.delete(LINK_PARAM)
-      window.history.replaceState(window.history.state, '', u.pathname + u.search + u.hash)
+      win.history.replaceState(win.history.state, '', u.pathname + u.search + u.hash)
     } catch (err) { /* leave the address as it is */ }
   }
-  setTimeout(() => {
-    if (registered) return
+  later(() => {
+    if (isRegistered()) return
+    // Switched on here but not registered yet (a slow load): it is coming, so no notice.
+    try { if (sdk.pluginDecisions?.get()?.[ID] === true) return } catch (err) { /* older Hermes */ }
     try {
-      host.notify({
+      sdk.notify({
         kind: 'warning',
         title: 'Annotary is off in this browser',
         message: 'Hermes starts the Annotary page switched off in each new browser. Turn on Annotary in Capabilities → Plugins, and this Document opens.',
-        action: { label: 'Open Plugins', onClick: () => host.navigate('/capabilities?tab=plugins') }
+        action: { label: 'Open Plugins', onClick: () => sdk.navigate('/capabilities?tab=plugins') }
       })
     } catch (err) { console.warn('[annotary] page is off in this browser; turn it on in Capabilities → Plugins') }
   }, OFF_AFTER_MS)
 }
-bootLink()
+bootLink(typeof window === 'undefined' ? null : window, host, () => registered)
 
 function hashDoc() {
   const h = window.location.hash || ''

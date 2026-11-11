@@ -46,3 +46,8 @@ def test_a_chat_elsewhere_gets_the_web_link(root):
     _public(root, "https://agent.example.test")
     out = tools._present(tools.Caller("coder", surface="telegram"), "nveriy5x")
     assert "card" not in out and "links.webapp" in out["show_link"]
+
+
+def test_a_public_address_with_a_path_prefix_keeps_it_once():
+    assert webapp.doc_url("nveriy5x", "https://h.example.test/hermes/") == \
+        "https://h.example.test/hermes/?annotary=nveriy5x#/annotary?doc=nveriy5x"

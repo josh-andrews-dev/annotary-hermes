@@ -37,6 +37,7 @@ def doc_url(doc: str, public: str | None = None) -> str | None:
     when no public address is set."""
     if public is None:
         public = settings()[1]
+    public = (public or "").rstrip("/")
     if not public:
         return None
     q = urllib.parse.urlencode({"doc": doc})
