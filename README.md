@@ -104,9 +104,11 @@ Disclosed per the Hermes plugin catalog rules. Nothing leaves the machine except
 **Turning the page on in a browser.** Hermes starts a plugin's page switched off in each new
 browser, so in the Webapp turn on **Annotary** once in Capabilities → Plugins. Native Desktop turns
 it on when the plugin is installed. An Annotary link opened in a browser where the page is off shows
-a notice with an **Open Plugins** button, and the Document opens once you turn it on. On Hermes 0.23 the Capabilities page fails in Safari, and every
-iPhone browser uses Safari's engine, so on an iPhone the page cannot be turned on until Hermes fixes
-that; the tools and chat cards still work there.
+a notice with an **Open Plugins** button, and the Document opens once you turn it on. On Hermes 0.23
+the Capabilities page fails in Safari, and every iPhone browser uses Safari's engine, so on an
+iPhone the page cannot be turned on until Hermes fixes that. The chat cards are drawn by the page,
+so they show there as plain text too; the agent's tools still work, and the agent knows to say the
+Document opens in Desktop or a computer's browser.
 
 An earlier version of this plugin copied its page in by hand with no package marker; its setup step
 now removes that copy, so Hermes can put the plugin's own page in its place.
