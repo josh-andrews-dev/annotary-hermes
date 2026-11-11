@@ -138,7 +138,8 @@ WAKE_SETUP = ("Send back, Approve and @mentions on a Document wake this chat onl
               "whether they want that. If yes: `hermes annotary wake on` in a terminal (run it, or ask them to).")
 PROFILES_SETUP = ("Annotary is not installed, or is a different copy than the default profile's, in "
                   "profile(s) {profiles}: those Bots cannot edit or be woken. Fix: in Capabilities → Plugins, Install here (or update) Annotary for "
-                  "each, then restart the gateway (System → Restart Gateway); or in a terminal outside this "
+                  "each, then restart the gateway (the status menu at the bottom left → Restart gateway); or in a "
+                  "terminal outside this "
                   "chat, `hermes annotary enable --all`.")
 
 
