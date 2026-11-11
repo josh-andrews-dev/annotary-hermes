@@ -50,7 +50,7 @@ Git takes no ref, and `--ref` takes a full SHA only. Then three things are still
   `desktop/` but not this copy. The Webapp re-runs Hermes's half copy when it loads its plugins
   (`GET /api/desktop-plugins/root`); from a shell, `reconcile_desktop_halves_report` in `hermes_cli/desktop_plugin_halves.py`.
   Check it with `grep -c attachFrame` or a hash.
-- The tools: until the gateway restarts (`hermes gateway restart --detach`, or the dashboard's System → Restart Gateway).
+- The tools: until the gateway restarts (`hermes gateway restart --detach`, or the status menu at the bottom left ("Backend ready") → Restart gateway).
 - The page's backend (`dashboard/plugin_api.py`): the dashboard imports it once and never again for a plugin already
   mounted, so a new route stays missing until the dashboard restarts. On Hermes Cloud the dashboard runs under s6:
   `s6-svc -r /run/service/dashboard` from the instance's terminal (`hermes dashboard` has no restart).

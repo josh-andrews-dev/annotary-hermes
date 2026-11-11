@@ -20,7 +20,7 @@ Needs Hermes 0.23.0 or newer, on macOS or Linux (WSL counts as Linux).
    at the top of the tab.
 2. **Every other profile** whose Bot should use Annotary: select that profile and choose **Install
    here** on the Annotary card.
-3. **Restart the gateway** (System → Restart Gateway), so the agents get the tools.
+3. **Restart the gateway** (the status menu at the bottom left ("Backend ready") → Restart gateway), so the agents get the tools.
 4. **The page.** In the browser you installed from, Hermes turns it on (the card's **Desktop** switch).
    In any other browser it starts off: turn on that switch once there. An Annotary link opened where
    it is off says so, with an **Open Plugins** button. Hermes Desktop turns it on by itself.
@@ -46,6 +46,21 @@ hermes annotary enable --all        # tools in every profile
 hermes gateway restart --detach
 hermes annotary wake on             # optional: let Send back, Approve and @mentions wake the Bot
 ```
+
+### Uninstall
+
+1. **Stop the private server**: `hermes annotary stop` (or end the `annotary serve` on
+   `127.0.0.1:7391`). Do this first: the command goes with the plugin.
+2. **Capabilities → Plugins → Annotary → Uninstall**, for each profile that has it (select the
+   profile at the top of the tab), then restart the gateway. Or in a terminal:
+   `hermes plugins remove annotary`, and `hermes -p NAME plugins remove annotary` for each profile.
+3. **Your Documents stay** until you delete them: `$HERMES_ROOT/annotary/` (the server, every
+   Document, the owner's secrets), `$HERMES_ROOT/desktop-plugins/annotary/`, and each profile's
+   `plugin-data/annotary/` (its Token).
+4. **Restart the gateway and the dashboard**, so neither keeps the plugin's code loaded (on Hermes
+   Cloud: `s6-svc -r /run/service/dashboard` in the instance's terminal).
+
+After that, a fresh install starts over: the next share asks your name again.
 
 ### Profiles you make later
 
