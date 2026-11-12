@@ -217,3 +217,10 @@ test("an invalid base report is named, never shown as no base", async () => {
   assert.match(body, /at `bbbbbbb` is not a valid size report/);
   assert.doesNotMatch(body, /No number grew|no size report yet/);
 });
+
+test("an API failure fails the run and leaves the comment alone", async () => {
+  const f = fakeGithub({ ["h".repeat(40)]: JSON.stringify(report()) });
+  f.github.rest.repos.getContent = async () => { throw Object.assign(new Error("Server Error"), { status: 502 }); };
+  await assert.rejects(sr.publish({ github: f.github, context: context(), core: fakeCore() }), /Server Error/);
+  assert.equal(f.calls.length, 0);
+});

@@ -285,6 +285,8 @@ async function publish({ github, context, core }) {
       ? renderComment({ base, head, baseSha, headSha, body: now.body })
       : renderComment({ problem: `This pull request has no \`${REPORT_PATH}\` at \`${sha7(headSha)}\`.` });
   } catch (e) {
+    // An API failure (a 5xx, a rate limit) fails the run and keeps the last comment as it was.
+    if (typeof e.status === "number") throw e;
     core.warning(String(e.message || e));
     body = renderComment({ problem: `\`${REPORT_PATH}\` at \`${sha7(at)}\` is not a valid size report.` });
   }
