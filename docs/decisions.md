@@ -328,6 +328,13 @@ The same three guards as annotary's, so one rule reads the same in every Annotar
   `TMPDIR`, `TZ`, and the `ANNOTARY_*` and `NO_COLOR` the plugin sets); rejected copying
   `os.environ` minus `ANNOTARY_*`, because the detached `annotary serve` then held every provider
   key for its whole life. The Bot Chat's `hermes chat` keeps the inherited one: it needs the keys.
+- **An upgrade restarts a server the old plugin started.** Chose a launch record
+  (`server.launch`, `<pid> minimal-env`) written at each start, and a restart when the running
+  server has none; rejected reading the process's environment because macOS does not show another
+  process's environment reliably. An old copy of the plugin in another profile (doctor's
+  "different copy", fixed by `hermes annotary enable --all`) still starts the server with
+  everything after a stop, and this plugin then restarts it once; the old copy sees the binary
+  current and leaves it, so they never take turns.
 - **Consent is read with `hermes -p PROFILE config get`.** Chose the public command; rejected the
   private `ctx._gateway_injection_allowed()` because it can change without notice, and the
   in-process `load_config_readonly()` because a watcher thread reads another profile's config
