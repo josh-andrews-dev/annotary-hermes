@@ -2,19 +2,26 @@
 # perf/size-report.json at the pull request's base and head, and fails when any number is larger
 # unless the body has a `Size growth: <why>` line, and always when a number is above its ceiling.
 # The `ci` job's `make test` (tests/test_size_report.py) holds the committed file equal to what the
-# plugin sends. Read-only token; the two reports are fetched through the API and validated as data.
-# Editing the body runs it again. GitHub-hosted runner: the repo is public.
+# plugin sends. The script comes from the pull request's base, never its head; `ci` tests the
+# head's copy. A pull_request run still takes this file from the pull request, so the trigger goes
+# in the next change, leaving pull_request_target, which takes it from the default branch (moved in
+# one change, a required check runs on neither event for that change). Then nothing of the pull
+# request runs here, and it cannot loosen the check in the change that grows a number. A change to the report's shape therefore lands in
+# the script first. Read-only token; the two reports are fetched through the API and validated as
+# data. Editing the body runs it again. GitHub-hosted runner: the repo is public.
 name: size
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, edited]
+  pull_request_target:
     types: [opened, synchronize, reopened, edited]
 
 permissions:
   contents: read
 
 concurrency:
-  group: size-${{ github.event.pull_request.number }}
+  group: size-${{ github.event_name }}-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
@@ -23,9 +30,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout the trusted script (the pull request's base, never its head)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.base.sha }}
           sparse-checkout: .github/scripts
           persist-credentials: false
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
