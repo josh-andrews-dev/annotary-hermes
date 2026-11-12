@@ -285,8 +285,10 @@ is in the maintainer's private plan.
   host when it reaches the event: a Bot that changes chats between two watchers' polls lost or
   doubled the wake. A Desktop backend's session falls to any running backend when its own has no
   running watcher (the chat may be open there again), and to the gateway, which wakes the Bot Chat,
-  when none runs. The gateway never injects a bare session id; a key recorded before hosts were is
-  read as a Desktop backend's when it has that shape.
+  when none runs. "Running" is per profile (`desktop_watchers` keys are `<profile>:<pid>`): a
+  dashboard was seen running `default`'s watcher but no longer `agent`'s, and a process-wide beat
+  left `agent`'s wakes to nobody. The gateway never injects a bare session id; a key recorded
+  before hosts were is read as a Desktop backend's when it has that shape.
 - **A watcher starts in `gateway run`, `gateway restart`, `dashboard` and `serve`, and reads nothing
   until Hermes's injector is live there.** Desktop's Restart gateway, on a Hermes with no service,
   leaves `gateway restart` running the gateway itself, so wake-ups stopped until the next terminal
