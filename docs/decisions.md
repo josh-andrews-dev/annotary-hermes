@@ -321,3 +321,20 @@ The same three guards as annotary's, so one rule reads the same in every Annotar
   request because a required check whose workflow is not yet on `main` blocks every other open
   pull request. `size comment` stays optional: it only reports. Neither the repo standard nor the
   new-project tooling owns this list, so a new required check is added to the ruleset by hand.
+
+## 2026-11-12: the plugin catalog's review
+
+- **The binary gets a minimal environment.** Chose an allowlist (`PATH`, `HOME`, `LANG`, `LC_*`,
+  `TMPDIR`, `TZ`, and the `ANNOTARY_*` and `NO_COLOR` the plugin sets); rejected copying
+  `os.environ` minus `ANNOTARY_*`, because the detached `annotary serve` then held every provider
+  key for its whole life. The Bot Chat's `hermes chat` keeps the inherited one: it needs the keys.
+- **Consent is read with `hermes -p PROFILE config get`.** Chose the public command; rejected the
+  private `ctx._gateway_injection_allowed()` because it can change without notice, and the
+  in-process `load_config_readonly()` because a watcher thread reads another profile's config
+  there. It runs only before a Bot Chat wake, so its cost does not matter; any failure is no.
+- **The Webapp's address comes from `load_config_readonly()`.** Chose Hermes's public merged
+  config in the root's own process (Hermes Cloud's `public_url` can come from the managed overlay
+  or `${ENV}`), the file as written elsewhere, and the plugin's own check of the address; rejected
+  `gateway.webapp_listener`, an internal module, and the file alone, which loses Hermes Cloud's.
+- **The host still comes from argv.** Rejected for now a more direct signal because Hermes has no
+  public one; `_host_ready` already asks the manager whether the host takes injected messages.

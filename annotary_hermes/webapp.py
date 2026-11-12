@@ -17,19 +17,45 @@ from . import accounts, paths
 LINK_PARAM = "annotary"
 
 
-def settings() -> tuple[bool, str]:
-    """(turned on, public address), read as Hermes reads them; "" for an address it would not use."""
+def _config() -> dict:
+    """The Hermes root's config. In the root's own process, Hermes's merged config (managed overlay,
+    `${ENV}` expansion), which Hermes Cloud uses for `public_url`; otherwise the file as written."""
     root = paths.hermes_root()
     try:
-        from gateway.webapp_listener import webapp_settings
-    except ImportError:  # not running inside Hermes
-        conf = accounts._read_profile_yaml(root / "config.yaml").get("webapp")
-        conf = conf if isinstance(conf, dict) else {}
-        public = conf.get("public_url")
-        valid = isinstance(public, str) and re.fullmatch(r"https?://[^\s/?#@]+(/[^\s?#@]*)?", public)
-        return conf.get("enabled") is True, public.rstrip("/") if valid else ""
-    s = webapp_settings(root)
-    return s.enabled is True, (s.public_url or "").rstrip("/")
+        from hermes_cli.config import load_config_readonly
+        own = root.resolve() == paths.current_home().resolve()
+    except (ImportError, OSError):  # not running inside Hermes
+        own = False
+    if own:
+        conf = load_config_readonly()
+        return conf if isinstance(conf, dict) else {}
+    return accounts._read_profile_yaml(root / "config.yaml")
+
+
+def _public_url(value) -> str | None:
+    """`public_url` without a trailing slash; "" when unset; None when Hermes would reject it."""
+    if value is None or value == "":
+        return ""
+    if not isinstance(value, str) or not re.fullmatch(r"https?://[^\s/?#@\\\"'<>]+(/[^\s?#@\\\"'<>]*)?", value):
+        return None
+    try:
+        port = urllib.parse.urlsplit(value).port  # a malformed port raises
+    except ValueError:
+        return None
+    return None if port == 0 else value.rstrip("/")
+
+
+def settings() -> tuple[bool, str]:
+    """(turned on, public address), read as Hermes reads them: on only for `enabled: true` with a
+    usable port and address; "" for an address it would not use. Public config reads only, so a
+    Hermes release that moves its internals cannot break it."""
+    conf = _config().get("webapp")
+    if not isinstance(conf, dict):
+        return False, ""
+    public = _public_url(conf.get("public_url"))
+    port = conf.get("port", 1)
+    port_ok = isinstance(port, int) and not isinstance(port, bool) and 1 <= port <= 65535
+    return conf.get("enabled") is True and port_ok and public is not None, public or ""
 
 
 def doc_url(doc: str, public: str | None = None) -> str | None:

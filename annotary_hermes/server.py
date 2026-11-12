@@ -50,10 +50,16 @@ def owner_handle(root: Path | None = None) -> str:
     return _secrets(root).get("owner_handle", "")
 
 
+#: All the binary is given of the host's environment: never the inherited one, which holds the
+#: person's provider keys and would stay in the detached `annotary serve` for its whole life.
+_ENV_KEEP = ("PATH", "HOME", "LANG", "TMPDIR", "TZ")
+_ENV_KEEP_PREFIXES = ("LC_",)
+
+
 def cli_env(token: str | None = None, root: Path | None = None) -> dict:
-    """The environment for the bundled CLI and server: our data dir and server, never ~/.annotary,
-    no update check (nothing leaves the machine), and the Token in the environment only."""
-    env = {k: v for k, v in os.environ.items() if not k.startswith("ANNOTARY_")}
+    """The environment for the bundled CLI and server: a minimal one, our data dir and server, never
+    ~/.annotary, no update check (nothing leaves the machine), and the Token in the environment only."""
+    env = {k: v for k, v in os.environ.items() if k in _ENV_KEEP or k.startswith(_ENV_KEEP_PREFIXES)}
     env["ANNOTARY_HOME"] = str(paths.data_dir(root))
     env["ANNOTARY_SERVER"] = paths.server_url()
     env["ANNOTARY_UPDATE_CHECK"] = "off"

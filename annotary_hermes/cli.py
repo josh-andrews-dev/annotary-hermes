@@ -133,12 +133,18 @@ def enable(args) -> int:
     return 0 if ok else 1
 
 
+def wake_allowed(profile: str) -> bool:
+    """Whether *profile* lets this plugin wake its chats (`allow_gateway_injection`), read through
+    `hermes -p PROFILE config get`: in a gateway thread the in-process config is another profile's."""
+    try:
+        r = _run_hermes(["-p", profile, "config", "get", f"plugins.entries.{paths.PLUGIN_ID}.allow_gateway_injection"])
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return r.returncode == 0 and r.stdout.strip().lower() == "true"
+
+
 def wake_state() -> dict:
-    out = {}
-    for pid in _profile_ids():
-        r = _run_hermes(["-p", pid, "config", "get", f"plugins.entries.{paths.PLUGIN_ID}.allow_gateway_injection"])
-        out[pid] = r.stdout.strip().lower() == "true"
-    return out
+    return {pid: wake_allowed(pid) for pid in _profile_ids()}
 
 
 def wake(args) -> int:

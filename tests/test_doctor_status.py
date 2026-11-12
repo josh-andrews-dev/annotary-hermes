@@ -73,15 +73,33 @@ def test_enabled_must_be_true_not_merely_present(webapp, capsys):
     assert ADVICE in doctor_output(capsys)
 
 
-def test_hermes_own_reader_wins_when_it_is_there(webapp, capsys, monkeypatch):
-    """Inside Hermes the config can be a link, or PyYAML absent: Hermes's reader handles both."""
-    webapp("The gateway is still starting the Webapp.")
-    listener = types.ModuleType("gateway.webapp_listener")
-    listener.webapp_settings = lambda home: types.SimpleNamespace(enabled=True, public_url="https://hermes.example.test")
-    monkeypatch.setitem(sys.modules, "gateway", types.ModuleType("gateway"))
-    monkeypatch.setitem(sys.modules, "gateway.webapp_listener", listener)
+def _hermes_config(monkeypatch, conf):
+    """Run as Hermes does: its public `load_config_readonly`, the merged config of this home."""
+    mod = types.ModuleType("hermes_cli.config")
+    mod.load_config_readonly = lambda: conf
+    monkeypatch.setitem(sys.modules, "hermes_cli", types.ModuleType("hermes_cli"))
+    monkeypatch.setitem(sys.modules, "hermes_cli.config", mod)
+
+
+def test_inside_hermes_the_merged_config_wins_over_the_file(webapp, capsys, monkeypatch):
+    """Hermes Cloud's address can come from the managed overlay or `${ENV}`, never in the file."""
+    webapp("The gateway is still starting the Webapp.", "webapp:\n  enabled: false\n")
+    _hermes_config(monkeypatch, {"webapp": {"enabled": True, "public_url": "https://hermes.example.test/"}})
     out = doctor_output(capsys)
     assert ADVICE not in out and "https://hermes.example.test/?annotary=<id>." in out
+
+
+def test_the_merged_config_is_held_to_the_same_rules(webapp, capsys, monkeypatch):
+    webapp("The Webapp is not enabled.")
+    _hermes_config(monkeypatch, {"webapp": {"enabled": True, "port": 0, "public_url": "https://hermes.example.test"}})
+    assert ADVICE in doctor_output(capsys)
+
+
+def test_no_internal_hermes_module_is_imported():
+    """Catalog rule: only Hermes's public reads, so a core release cannot break the plugin."""
+    for f in [ROOT / "__init__.py", *sorted((ROOT / "annotary_hermes").glob("*.py"))]:
+        text = f.read_text()
+        assert "gateway.webapp_listener" not in text and "_gateway_injection_allowed" not in text, f.name
 
 
 def _dashboard(name):
