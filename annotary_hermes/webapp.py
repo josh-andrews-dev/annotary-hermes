@@ -53,7 +53,7 @@ def _host_ok(value) -> bool:
     if not isinstance(value, str):
         return False
     host = value.strip()
-    if host.startswith("[") and host.endswith("]"):
+    if host.startswith("[") and host.endswith("]") and ":" in host[1:-1]:  # brackets only around IPv6
         host = host[1:-1]
     try:
         host = ipaddress.ip_address(host).compressed

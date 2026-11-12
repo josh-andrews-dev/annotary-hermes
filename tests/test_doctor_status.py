@@ -110,7 +110,8 @@ def test_hermes_rejected_hosts_and_addresses_turn_the_link_off(webapp, monkeypat
     from annotary_hermes import webapp as wa
     ok = {"enabled": True, "public_url": "https://agent.example.test"}
     for conf, on in [({}, True), ({"host": "[::1]"}, True), ({"host": "0:0:0:0:0:0:0:1"}, True),
-                     ({"host": "0.0.0.0"}, True), ({"host": "LOCALHOST"}, True),
+                     ({"host": "0.0.0.0"}, True), ({"host": "LOCALHOST"}, True), ({"host": "[::]"}, True),
+                     ({"host": "[localhost]"}, False), ({"host": "[127.0.0.1]"}, False),
                      ({"host": "192.0.2.10"}, False), ({"host": "agent.example.test"}, False),
                      ({"port": 0}, False), ({"port": True}, False),
                      ({"public_url": "HTTPS://agent.example.test"}, True), ({"public_url": "https://:9120"}, False)]:
