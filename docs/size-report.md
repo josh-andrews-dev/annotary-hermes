@@ -11,8 +11,9 @@ number grew, a ceiling was raised or removed, or a number is no longer reported,
 has a line `Size growth: <why>`; it always fails when a number is above its ceiling. A bot comment
 shows each number on `main`, on the pull request, the change and the ceiling, and is updated in
 place. Both workflows read the two files through the API and treat them only as data, and neither
-runs the pull request's copy of `.github/scripts/size-report.cjs`: the check takes it from the
-pull request's base and the comment from the default branch, so a pull request cannot loosen the
+runs anything of the pull request: both are `pull_request_target` workflows, so their own files come
+from the default branch, and `.github/scripts/size-report.cjs` comes from the pull request's base
+(the check) or the default branch (the comment), so a pull request cannot loosen the
 check in the change that grows a number (`ci` tests the head's copy). A change to the report's
 shape therefore merges in the script first, then in the report.
 
