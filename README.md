@@ -1,5 +1,7 @@
 # Annotary for Hermes Agent
 
+Part of [Annotary](https://github.com/josh-andrews-dev/annotary): it gives Hermes Agent its own private Annotary.
+
 [![Demo: a Chief of Staff Bot shares a draft, the person comments, Bots research and reply in Threads, Send back, v2 and Approve from a phone (click to play)](docs/media/demo-poster.png)](docs/media/annotary-hermes-demo.mp4)
 
 *Demo, under 90 s: [docs/media/annotary-hermes-demo.mp4](docs/media/annotary-hermes-demo.mp4).*
