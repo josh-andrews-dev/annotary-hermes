@@ -49,14 +49,17 @@ Thread. **Send back** wakes the editor to fix what you asked and push a new Vers
 Threads it fixed, so on the new Version they are under the header's "resolved" filter (a Thread
 whose text was rewritten sits at the bottom, under "orphaned"). **Approve** wakes the editor too,
 to answer what is left; it pushes nothing. A Bot answers in the chat that shared the Document when
-Hermes can still reach it, otherwise in its own chat (the **Bots** list in the sidebar).
+Hermes can still reach it, otherwise in its own chat. Its answer is in the Thread either way;
+`hermes annotary status` lists each wake-up and whether it reached a chat.
 
 ### Hermes Desktop connected to a remote Hermes (Hermes Cloud, a VPS)
 
 Hermes Desktop draws plugin pages only from the Mac (or PC) it runs on, never from the remote
-Hermes. So install it in both places: on the remote Hermes as above (from the Webapp, or in Desktop
-while connected), and on this machine with **Install from Git** and the **Desktop** target checked,
-which puts the page here. The agents, tools and Documents stay on the remote Hermes.
+Hermes. Installing from Desktop while it is connected covers both: the **Install from Git** dialog
+always installs the agent half into the connected Hermes, for the profile you pick, and the page
+into this machine's `desktop-plugins` folder. If you installed from the Webapp instead, run
+**Install from Git** once from Desktop while connected, with **Force reinstall** on, to put the page
+here. The agents, tools and Documents stay on the remote Hermes.
 
 ### From a terminal
 
@@ -178,9 +181,17 @@ too. Until then the chat cards, which the page draws, show as plain text. The ag
 tells you to do this until the page has loaded somewhere, and `hermes annotary doctor` says whether
 it has.
 
+**Updating the plugin.** Annotary's card has no Update button. Run **Install from Git** again with
+the same URL and **Force reinstall** on, once for each profile that has it (pick it in "Install
+for profile"). The toolbar's **Update all** works too, but updates every plugin. In a terminal:
+`hermes plugins install josh-andrews-dev/annotary-hermes --force`, with `-p NAME` for each other
+profile.
+
 **After updating the plugin**, restart the gateway (for the tools) and the dashboard (for the page's backend):
 Hermes reloads neither for a plugin it has already loaded. On Hermes Cloud the dashboard runs under s6, so from the
-instance's terminal: `s6-svc -r /run/service/dashboard`.
+instance's terminal: `s6-svc -r /run/service/dashboard`. Run from a chat, this ends that chat's turn
+("Response stopped"), and Desktop shows "Backend offline" for a few seconds: that is the restart,
+not a failure.
 
 An earlier version of this plugin copied its page in by hand with no package marker; its setup step
 now removes that copy, so Hermes can put the plugin's own page in its place.
