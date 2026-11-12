@@ -174,6 +174,109 @@ def test_send_back_wakes_the_editors_sharing_session_and_comments_wake_nobody(he
     assert "Send back" in text and "Please explain step one." in text and "annotary_push_version" in text
 
 
+def test_a_desktop_backend_chat_is_woken_by_the_desktop_backend_and_a_gateway_chat_by_the_gateway(hermes):
+    # A remote Hermes hosts Desktop chats in its dashboard, keyed by a bare session id the gateway
+    # cannot route: injected from the gateway, the wake reached no chat and still read "woke".
+    from annotary_hermes import docs
+    accounts.reconcile()
+    gw, desk = Inbox(), Inbox()
+    # The Desktop backend's watcher polls first here, so it counts as running when the wakes come.
+    ws = [watcher.Watcher("coder", desk.for_profile("coder"), host=docs.DESKTOP),
+          watcher.Watcher("coder", gw.for_profile("coder"))]
+    for w in ws:
+        w._cursor(server.owner_token())
+    remote = tools.share(tools.Caller(profile="coder", session_key="20261111_212221_fc90ed", surface="desktop",
+                                      host=docs.DESKTOP), markdown=PLAN, name="Remote")["id"]
+    local = share()["id"]
+    owner_cli("act", remote, "send-back")
+    owner_cli("act", local, "send-back")
+    drain(ws)
+    assert [k for _, _, k in desk.got] == ["20261111_212221_fc90ed"]
+    assert [k for _, _, k in gw.got] == ["sess-coder"]
+    log = [(r["doc"], r["outcome"], r["host"]) for r in state.load()["wake_log"]]
+    assert sorted(log) == sorted([(remote, "woke", "desktop"), (local, "woke", "gateway")])  # one each, never two
+
+
+def _mention(seq):
+    from annotary_hermes import rules
+    return rules.Wake(profile="coder", reason="mention", doc="d1", name="Plan", by="josh", thread="t1",
+                      excerpt="@coder hi", seq=seq)
+
+
+def _session(**fields):
+    state.update(lambda st: st["sessions"].__setitem__("coder", {"session_key": "k", **fields}))
+
+
+def test_with_no_desktop_backend_running_the_gateway_wakes_the_bot_chat_and_never_injects_a_bare_id(hermes):
+    # Recorded before hosts were: a bare id is a Desktop backend's, which the gateway cannot route.
+    _session(session_key="20261111_212221_fc90ed")
+    inbox, chats = Inbox(), []
+    w = watcher.Watcher("coder", inbox.for_profile("coder"), allowed=lambda: True,
+                        bot_chat=lambda *a, **kw: chats.append(a[0]) or True)
+    rec = w.deliver(_mention(11))
+    assert rec["outcome"] == "woke" and chats == ["coder"] and inbox.got == []
+
+
+def test_a_route_is_fixed_when_first_seen_so_a_host_change_neither_loses_nor_doubles_a_wake(hermes):
+    from annotary_hermes import docs
+    gw, desk = Inbox(), Inbox()
+    g = watcher.Watcher("coder", gw.for_profile("coder"))
+    d = watcher.Watcher("coder", desk.for_profile("coder"), host=docs.DESKTOP)
+    d._beat()
+    _session(**docs.where(docs.DESKTOP))
+    assert g.deliver(_mention(12)) is None  # the Desktop backend's
+    _session(session_key="agent:coder:local:dm:x", **docs.where(docs.GATEWAY))  # the Bot moved
+    assert d.deliver(_mention(12))["outcome"] == "woke" and desk.got[0][2] == "k"
+    assert g.deliver(_mention(12)) is None and d.deliver(_mention(12)) is None and gw.got == []
+
+
+def test_a_desktop_chat_is_woken_only_by_the_backend_that_holds_it(hermes):
+    # A Mac can run two Desktop backends; the other one's inject would miss and wake the Bot Chat too.
+    from annotary_hermes import docs
+    other = os.getppid()
+    state.update(lambda st: st["desktop_watchers"].__setitem__(str(other), __import__("time").time()))
+    d = watcher.Watcher("coder", Inbox().for_profile("coder"), host=docs.DESKTOP)
+    d._beat()
+    _session(host=docs.DESKTOP, pid=other)
+    assert d.deliver(_mention(13)) is None
+    assert watcher.Watcher("coder", Inbox().for_profile("coder")).deliver(_mention(13)) is None
+
+
+def test_a_wake_left_to_another_backend_holds_the_shared_cursor_until_it_is_claimed(hermes):
+    # Two backends share one cursor: the one that does not hold the chat must not move it past the wake.
+    import time
+    from annotary_hermes import docs
+    accounts.reconcile()
+    other = os.getppid()
+    inbox = Inbox()
+    b = watcher.Watcher("coder", inbox.for_profile("coder"), host=docs.DESKTOP)
+    b._cursor(server.owner_token())
+    state.update(lambda st: st["desktop_watchers"].__setitem__(str(other), time.time()))
+    doc = tools.share(caller("bencha", "sess-bencha"), markdown=PLAN, name="Plan")["id"]  # coder only reviews
+    _session(host=docs.DESKTOP, pid=other)
+    owner_cli("thread", "new", doc, "--document", "-m", "-", stdin="@coder a question")
+    b.stop.set()  # skip the pause after a held poll
+    assert b.step(wait=0) == [] and inbox.got == []
+    seq = int(server.api(server.owner_token(), "GET", "/api/v1/events?wait=0&limit=1")["seq"])
+    assert state.load()["cursors"]["coder@desktop"] < seq
+    state.update(lambda st: st["desktop_watchers"].pop(str(other)))  # that backend stopped
+    assert [r["outcome"] for r in b.step(wait=0)] == ["woke"] and inbox.got[0][2] == "k"
+    assert state.load()["cursors"]["coder@desktop"] == seq
+
+
+def test_a_watcher_whose_host_is_not_live_reads_nothing(hermes):
+    # `gateway restart` handing off to a service looks like the gateway but never hosts it.
+    import threading
+    accounts.reconcile()
+    w = watcher.Watcher("coder", Inbox().for_profile("coder"), ready=lambda: False)
+    t = threading.Thread(target=w.run, daemon=True)
+    t.start()
+    t.join(0.5)
+    w.stop.set()
+    t.join(5)
+    assert "coder" not in state.load()["cursors"]
+
+
 def test_mention_wakes_only_the_named_bot_and_tells_it_not_to_push(hermes):
     accounts.reconcile()
     tools.list_docs(caller("bencha", "sess-bencha"))  # bencha has used Annotary from this session
@@ -360,10 +463,16 @@ def test_the_wake_digest_marks_threads_waiting_for_an_answer(hermes):
     doc = share()["id"]
     owner_cli("thread", "new", doc, "--document", "-m", "-", stdin="Survey or interviews?")
     owner_cli("thread", "new", doc, "--document", "-m", "-", stdin="Add a rollback step.")
+    owner_cli("thread", "new", doc, "--document", "-m", "-", stdin="@bencha which step matters most?")
+    owner_cli("thread", "new", doc, "--document", "-m", "-", stdin="@coder and @bencha: agree?")
+    owner_cli("thread", "new", doc, "--document", "-m", "-", stdin="@rowan approved this; please fix it.")
     tools.reply(caller("coder"), doc=doc, thread="t2", text="Done in v1 already: step 4.")
     digest = watcher._thread_digest(server.owner_token(), doc, None, "coder")
     lines = {line.split(" ")[1]: line for line in digest.splitlines() if line.startswith("- t")}
     assert "(waiting for your answer)" in lines["t1"] and "(waiting for your answer)" not in lines["t2"]
+    # A question to another Bot is not the editor's to answer.
+    assert "(for @bencha to answer)" in lines["t3"] and "(waiting for your answer)" in lines["t4"]
+    assert "(waiting for your answer)" in lines["t5"]  # a handle that is no Bot's
 
 
 def test_a_profile_without_annotary_is_reported_once_and_never_made_editor(hermes):

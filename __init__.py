@@ -12,8 +12,10 @@ import json
 import logging
 import sys
 from pathlib import Path
+from typing import Callable
 
 from .annotary_hermes import paths, skillmeta, tools
+from .annotary_hermes.docs import DESKTOP, GATEWAY
 from .annotary_hermes import cli as annotary_cli
 
 log = logging.getLogger("annotary_hermes")
@@ -99,9 +101,36 @@ SCHEMAS = {
 }
 
 
-def _in_gateway() -> bool:
-    argv = [a for a in sys.argv[1:] if not a.startswith("-")]
-    return "gateway" in argv and argv[argv.index("gateway") + 1: argv.index("gateway") + 2] == ["run"]
+def _host_process(argv: list[str] | None = None) -> str:
+    """The Hermes host this process may be: the gateway (`gateway run`, or `gateway restart` with no
+    service, which Desktop's Restart gateway leaves running the gateway itself), a Desktop backend
+    (`dashboard` or `serve`, which host a remote Hermes's Desktop chats), or "" (any other command)."""
+    args = list(sys.argv[1:] if argv is None else argv)
+    words, i = [], 0
+    while i < len(args):
+        a = args[i]
+        if a in ("-p", "--profile"):  # the profile's name is not the command
+            i += 2
+            continue
+        if not a.startswith("-"):
+            words.append(a)
+        i += 1
+    if words[:1] == ["gateway"]:
+        return GATEWAY if words[1:2] in (["run"], ["restart"]) else ""
+    if words[:1] in (["dashboard"], ["serve"]):
+        lifecycle = {"--stop", "--status"} & set(args) or words[1:2] == ["register"]
+        return "" if lifecycle else DESKTOP
+    return ""
+
+
+def _host_ready(ctx, host: str) -> Callable[[], bool]:
+    """Whether this process's Hermes host is live and takes injected messages (a `gateway restart`
+    client that hands off to a service never is). A Hermes without these flags: always ready."""
+    attr = "has_gateway_message_injector" if host == GATEWAY else "has_tui_message_injector"
+    manager = getattr(ctx, "_manager", None)
+    if manager is None or not hasattr(type(manager), attr):
+        return lambda: True
+    return lambda: bool(getattr(manager, attr))
 
 
 def _session_key(kwargs: dict) -> str:
@@ -114,6 +143,8 @@ def _session_key(kwargs: dict) -> str:
 
 
 def register(ctx):
+    host = _host_process()
+
     def caller(kwargs: dict) -> tools.Caller:
         try:
             surface = ctx.session_surface()
@@ -129,8 +160,10 @@ def register(ctx):
             allowed = entry.get("allow_gateway_injection") is True
         except Exception:  # noqa: BLE001
             allowed = False
+        if host == DESKTOP and not surface:
+            surface = "desktop"  # the Desktop backend's chats (Desktop or the Webapp) set no platform
         return tools.Caller(profile=ctx.profile_name, session_key=_session_key(kwargs), surface=surface,
-                            cwd=cwd, injection_allowed=allowed)
+                            cwd=cwd, injection_allowed=allowed, host=host or GATEWAY)
 
     def handler(fn, params_of):
         def run(args, **kwargs):
@@ -168,11 +201,11 @@ def register(ctx):
     ctx.register_cli_command(name="annotary", help="Annotary: the private review server, Members and wake-ups",
                              setup_fn=annotary_cli.setup_argparse, handler_fn=annotary_cli.main)
 
-    if _in_gateway():
-        _start_watcher(ctx)
+    if host:
+        _start_watcher(ctx, host)
 
 
-def _start_watcher(ctx) -> None:
+def _start_watcher(ctx, host: str) -> None:
     from .annotary_hermes import watcher
 
     profile = ctx.profile_name  # captured here: a thread started from register() sees `default`
@@ -194,7 +227,7 @@ def _start_watcher(ctx) -> None:
         except Exception as e:  # noqa: BLE001
             log.debug("annotary: broadcast failed: %s", e)
 
-    w = watcher.Watcher(profile, inject, broadcast, allowed=allowed)
+    w = watcher.Watcher(profile, inject, broadcast, allowed=allowed, host=host, ready=_host_ready(ctx, host))
     w.start()
     try:
         ctx.on_unload(w.stop.set)

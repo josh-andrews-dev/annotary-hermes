@@ -309,7 +309,7 @@ class FakeTurn:
         return b"", b"boom" if self.code else b""
 
 
-def _wake_with(inject_ok, consent, bot_chat_ok=True):
+def _wake_with(inject_ok, consent, bot_chat_ok=True, seq=7):
     from annotary_hermes import rules, watcher
     calls = []
 
@@ -318,7 +318,7 @@ def _wake_with(inject_ok, consent, bot_chat_ok=True):
         return bot_chat_ok
     w = watcher.Watcher("bencha", lambda text, key: inject_ok, allowed=consent, bot_chat=bot_chat)
     rec = w.deliver(rules.Wake(profile="bencha", reason="mention", doc="d1", name="Plan", by="rowan",
-                               thread="t1", excerpt="@bencha hi", seq=7))
+                               thread="t1", excerpt="@bencha hi", seq=seq))
     return rec, calls
 
 
@@ -329,16 +329,16 @@ def test_a_bot_with_no_live_chat_is_woken_in_its_bot_chat_only_with_consent(herm
     calls[0][2]()  # the turn failed later: the wake is kept for the Bot after all
     assert state.load()["pending"]["bencha"][-1]["seq"] == 7
     state.update(lambda st: st["pending"].pop("bencha"))
-    rec, calls = _wake_with(inject_ok=False, consent=lambda: False)
+    rec, calls = _wake_with(inject_ok=False, consent=lambda: False, seq=8)
     assert rec["outcome"] == "notified" and calls == []
-    assert state.load()["pending"]["bencha"][-1]["seq"] == 7
+    assert state.load()["pending"]["bencha"][-1]["seq"] == 8
 
 
 def test_a_live_chat_or_unknown_consent_never_reaches_the_bot_chat(hermes_cloud):
     def unknown():
         raise AttributeError("an older Hermes")
     assert _wake_with(inject_ok=True, consent=lambda: True)[1] == []
-    rec, calls = _wake_with(inject_ok=False, consent=unknown)
+    rec, calls = _wake_with(inject_ok=False, consent=unknown, seq=8)
     assert rec["outcome"] == "notified" and calls == []
 
 

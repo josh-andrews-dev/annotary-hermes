@@ -425,15 +425,65 @@ class FakeCtx:
         pass
 
 
-def registered():
+def plugin_module():
     spec = importlib.util.spec_from_file_location("annotary_comment_plugin_under_test", ROOT / "__init__.py",
                                                   submodule_search_locations=[str(ROOT)])
     plugin = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = plugin
     spec.loader.exec_module(plugin)
+    return plugin
+
+
+def registered():
     ctx = FakeCtx()
-    plugin.register(ctx)
+    plugin_module().register(ctx)
     return ctx.tools
+
+
+@pytest.mark.parametrize("argv,host", [
+    (["hermes", "gateway", "run", "--replace"], "gateway"),
+    # Desktop's Restart gateway on a Hermes with no service leaves this process running the gateway.
+    (["hermes", "-p", "default", "gateway", "restart", "--interrupt"], "gateway"),
+    (["hermes", "dashboard", "--host", "0.0.0.0", "--port", "9119", "--no-open"], "desktop"),
+    # What Hermes Desktop spawns, locally and on an SSH remote.
+    (["hermes", "serve", "--port", "0"], "desktop"),
+    (["hermes", "-p", "work", "serve", "--isolated"], "desktop"),
+    (["hermes", "gateway", "status"], ""),
+    (["hermes", "chat", "-Q"], ""),
+    # A profile named like a command, and the lifecycle clients, host nothing.
+    (["hermes", "-p", "serve", "gateway", "run"], "gateway"),
+    (["hermes", "--profile", "dashboard", "chat"], ""),
+    (["hermes", "dashboard", "--stop"], ""),
+    (["hermes", "serve", "--status"], ""),
+    (["hermes", "dashboard", "register"], ""),
+])
+def test_the_watcher_runs_in_each_process_that_hosts_chats(monkeypatch, argv, host):
+    plugin = plugin_module()
+    monkeypatch.setattr(sys, "argv", argv)
+    assert plugin._host_process() == host
+
+
+def test_a_host_is_ready_only_once_hermes_takes_injected_messages():
+    plugin = plugin_module()
+
+    class Manager:
+        live = False
+
+        @property
+        def has_gateway_message_injector(self):
+            return self.live
+
+        @property
+        def has_tui_message_injector(self):
+            return not self.live
+
+    ctx = FakeCtx()
+    ctx._manager = Manager()
+    gateway, desktop = plugin._host_ready(ctx, "gateway"), plugin._host_ready(ctx, "desktop")
+    assert (gateway(), desktop()) == (False, True)
+    ctx._manager.live = True
+    assert (gateway(), desktop()) == (True, False)
+    assert plugin._host_ready(FakeCtx(), "gateway")()  # a Hermes without the flags
 
 
 def test_the_tools_are_registered_like_the_others():
@@ -457,3 +507,25 @@ def test_the_skill_tells_a_reviewer_it_comments_and_does_not_edit():
     for tool in ("annotary_read", "annotary_comment", "annotary_act"):
         assert tool in text
     assert len(text.encode()) < 24_000
+
+
+def test_a_share_from_the_desktop_backend_records_its_host_and_draws_the_card(hermes, monkeypatch):
+    # The dashboard's Desktop chats set no platform, so the surface was "" and the share gave a link, no card.
+    class NotLive:
+        has_gateway_message_injector = has_tui_message_injector = property(lambda self: False)
+
+    stops = []
+    ctx = FakeCtx()
+    ctx._manager, ctx.on_unload = NotLive(), stops.append
+    monkeypatch.setattr(sys, "argv", ["hermes", "dashboard", "--no-open"])
+    plugin_module().register(ctx)
+    accounts.reconcile()
+    try:
+        out = json.loads(ctx.tools["annotary_share"]["handler"]({"markdown": "# Note\n\nHi.\n", "name": "Note"},
+                                                               session_id="20261111_212221_fc90ed"))
+    finally:
+        for stop in stops:
+            stop()
+    assert "card" in out, out
+    entry = state.load()["docs"][out["id"]]
+    assert (entry["host"], entry["surface"], entry["session_key"]) == ("desktop", "desktop", "20261111_212221_fc90ed")

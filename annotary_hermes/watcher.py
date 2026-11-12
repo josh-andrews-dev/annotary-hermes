@@ -1,8 +1,13 @@
-"""The wake-up watcher, in the gateway: one thread per profile follows Annotary's events.
+"""The wake-up watcher: one thread per profile follows Annotary's events.
 
 Each profile's thread acts only on wake-ups for its own profile, because Hermes lets a plugin
 inject only into its own profile's sessions. One thread (whichever holds the leader lock) also
 broadcasts live updates to Desktop and Webapp windows and runs the 5-minute reconcile.
+
+It runs in the gateway, and also in each Desktop backend (`hermes dashboard` or `hermes serve`): a
+remote Hermes hosts Desktop chats there, and only that process can inject into them. Each copy keeps
+its own cursor. The first copy to see a wake-up fixes its route in `state["routes"]` and exactly one
+copy claims it there (see `Watcher._owns`), however the session's host changes afterwards.
 """
 
 from __future__ import annotations
@@ -10,6 +15,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import secrets
 import shutil
 import subprocess
@@ -23,6 +29,15 @@ from . import accounts, docs, paths, rules, server, state
 
 log = logging.getLogger("annotary_hermes")
 POLL_WAIT = 25  # seconds a long-poll parks (Annotary caps it at 30)
+#: Hermes's own session ids (`hermes_state_ids.new_session_id`): the key of a Desktop-backend chat,
+#: or a classic CLI's. The gateway cannot route one: it accepts it, then logs "not routed".
+BARE_SESSION_ID = re.compile(r"^\d{8}_\d{6}_[0-9a-f]{6,12}$")
+#: A route is kept a week, so a watcher that was down replays without delivering twice; past
+#: ROUTES_MAX the oldest go first.
+ROUTES_TTL, ROUTES_MAX = 7 * 86400, 5000
+#: A Desktop backend's watcher counts as running while its process lives and it polled within this
+#: (one poll is under a minute; the margin covers a slow wake). The pid check catches a dead one at once.
+DESKTOP_BEAT = 600
 
 Inject = Callable[[str, str], bool]  # (text, session_key) -> accepted
 Broadcast = Callable[[str, dict], None]  # (event name, payload)
@@ -114,22 +129,45 @@ def wake_bot_chat(profile: str, text: str, root: Path | None = None, *, spawn=su
     return True
 
 
+def _alive(pid: int) -> bool:
+    if pid <= 0:  # 0 and negatives name process groups
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except (OSError, ValueError, OverflowError):
+        return False
+    return True
+
+
 def head_seq(tok: str) -> int:
     return int(server.api(tok, "GET", "/api/v1/events?wait=0&limit=1").get("seq") or 0)
 
 
+MENTION = re.compile(r"(?<![\w@])@([A-Za-z0-9][A-Za-z0-9_-]*)")
+
+
 def _thread_digest(tok: str, doc: str, root: Path | None, me: str = "") -> str:
     """Every open Thread with its replies, as the woken agent's reading list. A Thread with no
-    reply from *me* is marked: it is waiting for an answer."""
+    reply from *me* is marked: it is waiting for an answer, unless it @mentions other Bots and not
+    *me* (it is theirs to answer)."""
     try:
         rows = docs.read_threads(tok, doc, open_only=True)
     except server.ServerError:
         rows = []
     if not rows:
         return "No open Threads."
+    bots = {m.get("handle") for m in state.load(root)["members"].values()}
     lines = []
     for t in rows[:40]:
-        waiting = " (waiting for your answer)" if me and not any(r["author"] == me for r in t["replies"]) else ""
+        asked = set(MENTION.findall(str(t["body"] or ""))) & bots
+        waiting = ""
+        if me and not any(r["author"] == me for r in t["replies"]):
+            waiting = (f" (for {', '.join('@' + h for h in sorted(asked))} to answer)" if asked and me not in asked
+                       else " (waiting for your answer)")
         lines.append(f"- {t['id']} @{t['author']} on {t['where']}{waiting}: "
                      f"{' '.join(str(t['body'] or '').split())[:600]}")
         for r in t["replies"][-10:]:
@@ -165,8 +203,12 @@ def message_for(w: rules.Wake, *, me: str, digest: str) -> str:
 class Watcher:
     def __init__(self, profile: str, inject: Inject, broadcast: Optional[Broadcast] = None,
                  root: Path | None = None, *, allowed: Callable[[], bool] = lambda: False,
-                 bot_chat: Callable[..., bool] = wake_bot_chat):
+                 bot_chat: Callable[..., bool] = wake_bot_chat, host: str = docs.GATEWAY,
+                 ready: Callable[[], bool] = lambda: True):
         self.profile = profile
+        self.host = host
+        self.ready = ready  # the process's Hermes host can take an injected message
+        self._cursor_key = profile if host == docs.GATEWAY else f"{profile}@{host}"
         self.inject = inject
         self.allowed = allowed  # the person's consent to wake this profile (allow_gateway_injection)
         self.bot_chat = bot_chat
@@ -175,8 +217,13 @@ class Watcher:
         self.stop = threading.Event()
         self._leader_file = None
         self._last_reconcile = 0.0
+        self._held: int | None = None  # the first event seq in this poll left to another backend
 
     # -- leadership: one thread per install broadcasts and reconciles
+    @property
+    def cursor_name(self) -> str:
+        return self._cursor_key
+
     def _try_lead(self) -> bool:
         if self._leader_file is not None:
             return True
@@ -191,7 +238,7 @@ class Watcher:
         return True
 
     def _cursor(self, tok: str) -> int:
-        cur = state.load(self.root)["cursors"].get(self.profile)
+        cur = state.load(self.root)["cursors"].get(self._cursor_key)
         if cur is None:
             cur = head_seq(tok)
             self._save_cursor(cur)
@@ -199,17 +246,78 @@ class Watcher:
 
     def _save_cursor(self, seq: int) -> None:
         def work(st: dict) -> None:
-            st["cursors"][self.profile] = seq
+            st["cursors"][self._cursor_key] = seq
         state.update(work, self.root)
 
-    def deliver(self, w: rules.Wake) -> dict:
-        """Wake this profile's session for *w*, or leave a notice when waking is off."""
-        st = state.load(self.root)
+    def _target(self, st: dict, w: rules.Wake) -> dict:
+        """The session *w* wakes: its key ("" for none on record), host and Desktop-backend pid."""
         doc = st["docs"].get(w.doc, {})
-        if w.reason == "review" or doc.get("editor") == self.profile:
-            key = doc.get("session_key") or st["sessions"].get(self.profile, {}).get("session_key", "")
-        else:
-            key = st["sessions"].get(self.profile, {}).get("session_key", "")
+        last = st["sessions"].get(self.profile, {})
+        pick = doc if (w.reason == "review" or doc.get("editor") == self.profile) and doc.get("session_key") else last
+        key = pick.get("session_key", "")
+        # Recorded before hosts were: a bare session id came from a Desktop backend.
+        host = pick.get("host") or (docs.DESKTOP if BARE_SESSION_ID.match(key) else docs.GATEWAY)
+        return {"key": key, "host": host if key else docs.GATEWAY, "pid": pick.get("pid") if key else None}
+
+    def _live_desktops(self, st: dict) -> set[int]:
+        now = time.time()
+        return {int(pid) for pid, at in st["desktop_watchers"].items()
+                if now - at < DESKTOP_BEAT and _alive(int(pid))}
+
+    def _owns(self, route: dict, st: dict) -> bool:
+        """Whether this copy delivers *route*. A gateway session: the gateway's. A Desktop backend's:
+        that backend's, or, when its process has no running watcher, any running backend's (the chat
+        may be open there again); with none running, the gateway's, which wakes the Bot Chat."""
+        if route["host"] == docs.GATEWAY:
+            return self.host == docs.GATEWAY
+        live = self._live_desktops(st)
+        if self.host == docs.GATEWAY:
+            return not live
+        return route.get("pid") == os.getpid() or route.get("pid") not in live
+
+    def _claim(self, w: rules.Wake) -> dict | None:
+        wid = f"{w.profile}:{w.seq}:{w.reason}:{w.doc}:{w.thread}"
+
+        def work(st: dict) -> dict | None:
+            routes, now = st["routes"], time.time()
+            route = routes.get(wid)
+            if route is None:
+                route = routes[wid] = {**self._target(st, w), "at": now}
+                old = [k for k in routes if now - routes[k].get("at", 0) > ROUTES_TTL]
+                old += sorted(routes, key=lambda k: routes[k].get("at", 0))[:max(0, len(routes) - len(old) - ROUTES_MAX)]
+                for k in set(old) - {wid}:
+                    del routes[k]
+            if route.get("by"):
+                return None
+            if not self._owns(route, st):
+                # Another running backend's: it may poll after us, so our shared cursor must wait here.
+                if self.host == docs.DESKTOP and route["host"] == docs.DESKTOP:
+                    self._held = w.seq if self._held is None else min(self._held, w.seq)
+                return None
+            route["by"] = self.host
+            return dict(route)
+        return state.update(work, self.root)
+
+    def _beat(self) -> None:
+        if self.host != docs.DESKTOP:
+            return
+        def work(st: dict) -> None:
+            beats = st["desktop_watchers"]
+            beats[str(os.getpid())] = time.time()
+            for pid in [p for p, at in beats.items() if time.time() - at >= DESKTOP_BEAT or not _alive(int(p))]:
+                del beats[pid]
+        state.update(work, self.root)
+
+    def deliver(self, w: rules.Wake) -> dict | None:
+        """Wake this profile's session for *w*, or leave a notice when waking is off. None: another
+        copy of the watcher delivers it (or already has)."""
+        route = self._claim(w)
+        if route is None:
+            return None
+        key = route["key"]
+        # The gateway cannot route a Desktop backend's (or any bare) session id: straight to the Bot Chat.
+        unroutable = self.host == docs.GATEWAY and bool(key) and (
+            route["host"] == docs.DESKTOP or bool(BARE_SESSION_ID.match(key)))
         if w.by_agent:
             def cap(s: dict) -> bool:
                 ok, hist = rules.allow_agent_wake(s["agent_wakes"].get(w.doc, []), time.time())
@@ -223,7 +331,7 @@ class Watcher:
         text = message_for(w, me=me, digest=digest)
         ok = False
         try:
-            ok = bool(self.inject(text, key))
+            ok = False if unroutable else bool(self.inject(text, key))
             # No live chat of this Bot (it never used Annotary, or that chat is gone): its Bot Chat.
             if not ok and self._consented():
                 ok = bool(self.bot_chat(self.profile, text, self.root, on_fail=lambda: self._notify(w, me)))
@@ -254,7 +362,7 @@ class Watcher:
     def _record(self, w: rules.Wake, outcome: str, key: str) -> dict:
         rec = {"at": time.time(), "profile": self.profile, "reason": w.reason, "doc": w.doc, "by": w.by,
                "action": w.action, "thread": w.thread, "seq": w.seq, "outcome": outcome,
-               "session": bool(key)}
+               "session": bool(key), "host": self.host}
         def work(s: dict) -> None:
             s.setdefault("wake_log", []).append(rec)
             s["wake_log"] = s["wake_log"][-100:]
@@ -266,7 +374,8 @@ class Watcher:
     def step(self, wait: int = POLL_WAIT) -> list[dict]:
         """One long-poll: handle what arrived, advance the cursor. Returns the wake records."""
         server.ensure_running(self.root)
-        leader = self._try_lead()
+        self._beat()
+        leader = self.host == docs.GATEWAY and self._try_lead()
         if leader and time.time() - self._last_reconcile >= accounts.GATEWAY_RECONCILE_EVERY:
             self._last_reconcile = time.time()
             try:
@@ -279,21 +388,31 @@ class Watcher:
                           timeout=wait + 15)
         events = page.get("events") or []
         out: list[dict] = []
+        self._held = None
         if events:
             st = state.load(self.root)
             managed = {v["handle"]: k for k, v in st["members"].items()}
             for ev in events:
                 editor = st["docs"].get(ev.get("doc") or "", {}).get("editor")
                 for w in rules.decide(ev, managed=managed, editor=editor):
-                    if w.profile == self.profile:
-                        out.append(self.deliver(w))
+                    if w.profile == self.profile and (rec := self.deliver(w)) is not None:
+                        out.append(rec)
             if leader and self.broadcast:
                 for doc in sorted({e.get("doc") for e in events if e.get("doc")}):
                     self.broadcast("changed", {"doc": doc, "seq": int(page.get("seq") or 0)})
-        self._save_cursor(int(page.get("seq") or since))
+        seq = int(page.get("seq") or since)
+        if self._held is not None:  # never past a wake another backend has yet to claim
+            seq = min(seq, self._held - 1)
+        self._save_cursor(max(seq, since))
+        if self._held is not None:
+            self.stop.wait(2.0)  # it is still there on the next poll: give its owner a turn
         return out
 
     def run(self) -> None:
+        # A process that only looks like a host (`gateway restart` run as a short-lived client) never
+        # becomes ready, so it never reads events or moves the cursor.
+        while not self.stop.is_set() and not self._ready():
+            self.stop.wait(2.0)
         backoff = 1.0
         while not self.stop.is_set():
             try:
@@ -304,7 +423,13 @@ class Watcher:
                 self.stop.wait(backoff)
                 backoff = min(backoff * 2, 60.0)
 
+    def _ready(self) -> bool:
+        try:
+            return bool(self.ready())
+        except Exception:  # noqa: BLE001 — unknown is not ready
+            return False
+
     def start(self) -> threading.Thread:
-        t = threading.Thread(target=self.run, name=f"annotary-watch-{self.profile}", daemon=True)
+        t = threading.Thread(target=self.run, name=f"annotary-watch-{self.cursor_name}", daemon=True)
         t.start()
         return t

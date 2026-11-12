@@ -11,11 +11,11 @@ is in the maintainer's private plan.
   package half switched off in each new browser and Safari's Capabilities page cannot switch it
   on, and because Hermes's half-copier (Electron's and the Webapp's) adopts a marker-less copy
   whose `plugin.js` is byte-equal to a package half by writing a marker into it.
-- **One watcher thread per profile, in the gateway only.** Chose per-profile watchers that act
+- **One watcher thread per profile, in the gateway.** Chose per-profile watchers that act
   only on their own profile's wake-ups; rejected one shared watcher because
   `ctx.inject_message` reaches only the calling plugin's own profile. One of them (an flock)
   broadcasts live updates and runs the 5-minute reconcile. `register()` starts nothing outside
-  `hermes gateway run`, since it runs in every `hermes` command.
+  the processes that host chats (see 2026-11-11), since it runs in every `hermes` command.
 - **Shared state on disk, under one flock.** Chose `$HERMES_ROOT/annotary/state.json`; rejected
   module globals because each profile imports its own copy of the plugin module and the backend
   runs in other processes.
@@ -270,3 +270,25 @@ is in the maintainer's private plan.
   rendered before re-render on read. Each tarball was checked against the release's `sha256.sum`
   and with `gh attestation verify`. An installed plugin picks the new binary up on its next
   call (`server.ensure_running` restarts a server that runs a stale pin).
+
+## 2026-11-11: Wake-ups for Desktop chats on a remote Hermes
+
+- **A watcher in each Desktop backend too.** A remote Hermes (Hermes Cloud) hosts Desktop chats in
+  its Desktop backend (`hermes dashboard`, or `hermes serve`, which Desktop spawns), keyed by a bare
+  session id. Only that process can inject into them: from the gateway, Hermes accepted the message,
+  then logged "not routed", and the wake read "woke". Chose to record which process holds each
+  session (`host`, and a Desktop backend's `pid`, since a Mac can run two) and to run a watcher in
+  each, with its own cursor; rejected forwarding wakes from the gateway to the backend, which would
+  need a private channel between them. Only the gateway's watcher leads (broadcast, reconcile).
+- **Each wake-up is routed once and claimed once**, in `state["routes"]`: the first watcher to see it
+  fixes its target, and only its owner delivers. Rejected letting each watcher read the session's
+  host when it reaches the event: a Bot that changes chats between two watchers' polls lost or
+  doubled the wake. A Desktop backend's session falls to any running backend when its own has no
+  running watcher (the chat may be open there again), and to the gateway, which wakes the Bot Chat,
+  when none runs. The gateway never injects a bare session id; a key recorded before hosts were is
+  read as a Desktop backend's when it has that shape.
+- **A watcher starts in `gateway run`, `gateway restart`, `dashboard` and `serve`, and reads nothing
+  until Hermes's injector is live there.** Desktop's Restart gateway, on a Hermes with no service,
+  leaves `gateway restart` running the gateway itself, so wake-ups stopped until the next terminal
+  restart. A `gateway restart` that only asks a service to restart, `--stop`/`--status` and
+  `dashboard register` never get the injector, so their watchers never move the cursor.

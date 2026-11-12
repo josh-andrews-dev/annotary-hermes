@@ -33,6 +33,7 @@ class Caller:
     surface: str = ""
     cwd: str = ""
     injection_allowed: bool = False
+    host: str = docs.GATEWAY  # the Hermes process this call runs in (docs.GATEWAY or docs.DESKTOP)
 
 
 class ToolError(Exception):
@@ -52,7 +53,7 @@ def _prepare(c: Caller, root: Path | None = None) -> str:
         tok = accounts.token_for(c.profile, root)
     if not tok:
         raise ToolError(f"profile {c.profile} has no Annotary Member; run `hermes annotary doctor`")
-    docs.note_session(c.profile, c.session_key, c.surface, root)
+    docs.note_session(c.profile, c.session_key, c.surface, c.host, root)
     return tok
 
 
@@ -253,7 +254,7 @@ def share(c: Caller, *, path: str = "", markdown: str = "", name: str = "", mess
         staging.rename(final)
         file = final / file.name
     docs.record_share(doc_id, name=pushed.get("name", ""), profile=c.profile, session_key=c.session_key,
-                      surface=c.surface, path=str(file), root=root)
+                      surface=c.surface, path=str(file), host=c.host, root=root)
     out = {"id": doc_id, "name": pushed.get("name"), "version": pushed.get("version"),
            "editor": f"@{accounts.handle_of(c.profile, root)}", **_present(c, doc_id),
            "next": "Wait for the person's review. Do not push again until they Send back or Approve."}
@@ -382,7 +383,7 @@ def push_version(c: Caller, *, doc: str, path: str = "", markdown: str = "", mes
     doc_id = head["id"]
     entry = docs.info(doc_id, root)
     if entry is None:  # shared outside this plugin: the first agent to push becomes its editor
-        entry = docs.set_editor(doc_id, c.profile, session_key=c.session_key, root=root)
+        entry = docs.set_editor(doc_id, c.profile, session_key=c.session_key, host=c.host, root=root)
     editor = entry.get("editor")
     refusal = rules.push_refusal(
         profile=c.profile, editor=editor, editor_handle=accounts.handle_of(editor, root) if editor else None,
@@ -404,7 +405,7 @@ def push_version(c: Caller, *, doc: str, path: str = "", markdown: str = "", mes
                        root, cwd=file.parent)
     if c.session_key:
         def work(st: dict) -> None:
-            st["docs"].setdefault(doc_id, {})["session_key"] = c.session_key
+            st["docs"].setdefault(doc_id, {}).update(session_key=c.session_key, **docs.where(c.host))
             st["docs"][doc_id]["path"] = str(file)
         state.update(work, root)
     return {**pushed, **_present(c, doc_id),
