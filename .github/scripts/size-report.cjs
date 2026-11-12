@@ -240,7 +240,7 @@ function pullOf(context) {
   return pr;
 }
 
-/** The `size` check (`pull_request`, read-only token). */
+/** The `size` check (`pull_request_target`; this file comes from the pull request's base; read-only token). */
 async function check({ github, context, core }) {
   const pr = pullOf(context);
   const { owner, repo } = context.repo;
