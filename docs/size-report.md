@@ -10,8 +10,11 @@ On a pull request, the `size` check compares the file at the base and the head. 
 number grew, a ceiling was raised or removed, or a number is no longer reported, until the body
 has a line `Size growth: <why>`; it always fails when a number is above its ceiling. A bot comment
 shows each number on `main`, on the pull request, the change and the ceiling, and is updated in
-place. Both workflows read the two files through the API and treat them only as data; the comment's
-workflow runs the script from the default branch and never checks out pull request code.
+place. Both workflows read the two files through the API and treat them only as data, and neither
+runs the pull request's copy of `.github/scripts/size-report.cjs`: the check takes it from the
+pull request's base and the comment from the default branch, so a pull request cannot loosen the
+check in the change that grows a number (`ci` tests the head's copy). A change to the report's
+shape therefore merges in the script first, then in the report.
 
 ## The fixture
 
