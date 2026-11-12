@@ -17,6 +17,10 @@ from the default branch, and `.github/scripts/size-report.cjs` comes from the pu
 change that grows a number (`ci` tests the head's copy). A change to the report's
 shape therefore merges in the script first, then in the report.
 
+annotary (`josh-andrews-dev/annotary`) carries the original of `.github/scripts/size-report.cjs`, and
+the other Annotary repos keep copies that differ only where their reports differ; a fix to one copy
+is ported to the others in the same run.
+
 ## The fixture
 
 The test runs the real pinned `annotary serve` that `make test` starts, set up as on Hermes Cloud
