@@ -294,3 +294,25 @@ is in the maintainer's private plan.
   leaves `gateway restart` running the gateway itself, so wake-ups stopped until the next terminal
   restart. A `gateway restart` that only asks a service to restart, `--stop`/`--status` and
   `dashboard register` never get the injector, so their watchers never move the cursor.
+
+## 2026-11-12: a size report, and the size and surfaces checks
+
+The same three guards as annotary's, so one rule reads the same in every Annotary repo.
+
+- **Counts, never times, in a committed file.** Chose `perf/size-report.json`, held equal to what
+  `tests/test_size_report.py` measures on every `make test` (about 3 s), with ceilings in
+  `perf/BUDGETS.md`; rejected a separate, slower target as annotary has because seeding here is
+  quick, and timed numbers because a hosted runner's times mean nothing.
+- **The backend counted as FastAPI renders it.** Chose to call the routes of
+  `dashboard/plugin_api.py` and render each value with `JSONResponse`; rejected FastAPI's test
+  client because it needs `httpx`, a new test dependency, for the same bytes.
+- **Set up as on Hermes Cloud.** Chose the OS user `hermes`, so the person is `@owner` on every
+  machine; rejected normalizing handles because the handle is in many answers and their lengths.
+- **A review Document big enough to arrive in parts.** Chose 2,000 lines and 80 Threads, over
+  annotary's `PART_MAX`, so the parts path and its restart are counted; rejected a small fixture
+  because the costs that matter in Hermes (parts, a restart, the 10 s poll) would not show.
+- **Growth needs a `Size growth:` line; a ceiling always fails (D1).** A count under 10 keeps its
+  value as its ceiling: one more request is more than 10%.
+- **A `## Surfaces` section on `feat`, `fix` and `perf` pull requests (D3),** with annotary's five
+  names; the checklist is `docs/surfaces.md`, and `AGENTS.md` carries a short pointer (the
+  always-loaded ratchet raised by its 527 bytes).

@@ -27,6 +27,16 @@ The pre-commit and pre-push hooks scan for secrets with
   `commit-msg` hook and CI check them. A pull request is squash-merged with its title as the
   subject.
 - A bug fix comes with a test that fails without the fix.
+- A `feat`, `fix` or `perf` pull request has a `## Surfaces` section: one line each for Web, Hermes
+  page, App, CLI and Agents, saying `changed`, `not affected: <why>` or `follows: <why>`. As an
+  outside contributor you cannot change annotary's pages or the iPhone and iPad app, so write
+  `follows: outside contributor` for those; the maintainer carries the change there.
+  [`docs/surfaces.md`](docs/surfaces.md) has the list to walk.
+- **Sizes.** `make test` counts what the plugin sends for a fixed set of Documents and compares
+  it with `perf/size-report.json`. If your change moves a number, run `make size-report` and commit
+  the file; if a number grew, add a line `Size growth: <why>` to the pull request body. A bot
+  comment on the pull request shows every number against `main`
+  ([`docs/size-report.md`](docs/size-report.md)).
 
 ## License
 
