@@ -242,6 +242,28 @@ def test_a_desktop_chat_is_woken_only_by_the_backend_that_holds_it(hermes):
     assert watcher.Watcher("coder", Inbox().for_profile("coder")).deliver(_mention(13)) is None
 
 
+def test_a_wake_left_to_another_backend_holds_the_shared_cursor_until_it_is_claimed(hermes):
+    # Two backends share one cursor: the one that does not hold the chat must not move it past the wake.
+    import time
+    from annotary_hermes import docs
+    accounts.reconcile()
+    other = os.getppid()
+    inbox = Inbox()
+    b = watcher.Watcher("coder", inbox.for_profile("coder"), host=docs.DESKTOP)
+    b._cursor(server.owner_token())
+    state.update(lambda st: st["desktop_watchers"].__setitem__(str(other), time.time()))
+    doc = tools.share(caller("bencha", "sess-bencha"), markdown=PLAN, name="Plan")["id"]  # coder only reviews
+    _session(host=docs.DESKTOP, pid=other)
+    owner_cli("thread", "new", doc, "--document", "-m", "-", stdin="@coder a question")
+    b.stop.set()  # skip the pause after a held poll
+    assert b.step(wait=0) == [] and inbox.got == []
+    seq = int(server.api(server.owner_token(), "GET", "/api/v1/events?wait=0&limit=1")["seq"])
+    assert state.load()["cursors"]["coder@desktop"] < seq
+    state.update(lambda st: st["desktop_watchers"].pop(str(other)))  # that backend stopped
+    assert [r["outcome"] for r in b.step(wait=0)] == ["woke"] and inbox.got[0][2] == "k"
+    assert state.load()["cursors"]["coder@desktop"] == seq
+
+
 def test_a_watcher_whose_host_is_not_live_reads_nothing(hermes):
     # `gateway restart` handing off to a service looks like the gateway but never hosts it.
     import threading

@@ -32,8 +32,12 @@ POLL_WAIT = 25  # seconds a long-poll parks (Annotary caps it at 30)
 #: Hermes's own session ids (`hermes_state_ids.new_session_id`): the key of a Desktop-backend chat,
 #: or a classic CLI's. The gateway cannot route one: it accepts it, then logs "not routed".
 BARE_SESSION_ID = re.compile(r"^\d{8}_\d{6}_[0-9a-f]{6,12}$")
-ROUTES_KEEP = 500
-DESKTOP_BEAT = 90  # seconds a Desktop backend's watcher counts as running after its last poll
+#: A route is kept a week, so a watcher that was down replays without delivering twice; past
+#: ROUTES_MAX the oldest go first.
+ROUTES_TTL, ROUTES_MAX = 7 * 86400, 5000
+#: A Desktop backend's watcher counts as running while its process lives and it polled within this
+#: (one poll is under a minute; the margin covers a slow wake). The pid check catches a dead one at once.
+DESKTOP_BEAT = 600
 
 Inject = Callable[[str, str], bool]  # (text, session_key) -> accepted
 Broadcast = Callable[[str, dict], None]  # (event name, payload)
@@ -213,6 +217,7 @@ class Watcher:
         self.stop = threading.Event()
         self._leader_file = None
         self._last_reconcile = 0.0
+        self._held: int | None = None  # the first event seq in this poll left to another backend
 
     # -- leadership: one thread per install broadcasts and reconciles
     @property
@@ -274,13 +279,20 @@ class Watcher:
         wid = f"{w.profile}:{w.seq}:{w.reason}:{w.doc}:{w.thread}"
 
         def work(st: dict) -> dict | None:
-            routes = st["routes"]
+            routes, now = st["routes"], time.time()
             route = routes.get(wid)
             if route is None:
-                route = routes[wid] = {**self._target(st, w), "at": time.time()}
-                for old in sorted(routes, key=lambda k: routes[k].get("at", 0))[:max(0, len(routes) - ROUTES_KEEP)]:
-                    del routes[old]
-            if route.get("by") or not self._owns(route, st):
+                route = routes[wid] = {**self._target(st, w), "at": now}
+                old = [k for k in routes if now - routes[k].get("at", 0) > ROUTES_TTL]
+                old += sorted(routes, key=lambda k: routes[k].get("at", 0))[:max(0, len(routes) - len(old) - ROUTES_MAX)]
+                for k in set(old) - {wid}:
+                    del routes[k]
+            if route.get("by"):
+                return None
+            if not self._owns(route, st):
+                # Another running backend's: it may poll after us, so our shared cursor must wait here.
+                if self.host == docs.DESKTOP and route["host"] == docs.DESKTOP:
+                    self._held = w.seq if self._held is None else min(self._held, w.seq)
                 return None
             route["by"] = self.host
             return dict(route)
@@ -292,7 +304,7 @@ class Watcher:
         def work(st: dict) -> None:
             beats = st["desktop_watchers"]
             beats[str(os.getpid())] = time.time()
-            for pid in [p for p, at in beats.items() if time.time() - at >= DESKTOP_BEAT]:
+            for pid in [p for p, at in beats.items() if time.time() - at >= DESKTOP_BEAT or not _alive(int(p))]:
                 del beats[pid]
         state.update(work, self.root)
 
@@ -376,6 +388,7 @@ class Watcher:
                           timeout=wait + 15)
         events = page.get("events") or []
         out: list[dict] = []
+        self._held = None
         if events:
             st = state.load(self.root)
             managed = {v["handle"]: k for k, v in st["members"].items()}
@@ -387,7 +400,12 @@ class Watcher:
             if leader and self.broadcast:
                 for doc in sorted({e.get("doc") for e in events if e.get("doc")}):
                     self.broadcast("changed", {"doc": doc, "seq": int(page.get("seq") or 0)})
-        self._save_cursor(int(page.get("seq") or since))
+        seq = int(page.get("seq") or since)
+        if self._held is not None:  # never past a wake another backend has yet to claim
+            seq = min(seq, self._held - 1)
+        self._save_cursor(max(seq, since))
+        if self._held is not None:
+            self.stop.wait(2.0)  # it is still there on the next poll: give its owner a turn
         return out
 
     def run(self) -> None:
