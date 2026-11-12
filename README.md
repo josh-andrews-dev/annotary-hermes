@@ -32,8 +32,8 @@ Needs Hermes 0.23.0 or newer, on macOS or Linux (WSL counts as Linux).
    picks the profile (start with the default one).
 2. **Every other profile** whose Bot should use Annotary: find the **Annotary** card (Filters →
    Installed, or search "annotary"; the catalog is listed first), open it, pick that profile in the
-   card's profile menu, and choose **Install here**, then **Install**. The card closes when you
-   switch profiles: open it again.
+   card's profile menu, and choose **Install here**, then **Install**. After switching profiles,
+   close the card and open it again: it can still show the last profile's state.
 3. **Restart the gateway** (the status menu at the bottom left ("Backend ready") → Restart gateway), so the agents get the tools.
 4. **The page.** In the browser you installed from, Hermes turns it on (the card's **Desktop** switch).
    In any other browser it starts off: turn on that switch once there. An Annotary link opened where

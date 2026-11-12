@@ -1,8 +1,12 @@
-"""The wake-up watcher, in the gateway: one thread per profile follows Annotary's events.
+"""The wake-up watcher: one thread per profile follows Annotary's events.
 
 Each profile's thread acts only on wake-ups for its own profile, because Hermes lets a plugin
 inject only into its own profile's sessions. One thread (whichever holds the leader lock) also
 broadcasts live updates to Desktop and Webapp windows and runs the 5-minute reconcile.
+
+It runs in the gateway, and also in the dashboard: a remote Hermes hosts Desktop chats in the
+dashboard's own Desktop backend, and only that process can inject into them. Each copy wakes only
+the sessions its process holds (`docs.GATEWAY` or `docs.DESKTOP`) and keeps its own cursor.
 """
 
 from __future__ import annotations
@@ -10,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import secrets
 import shutil
 import subprocess
@@ -118,9 +123,13 @@ def head_seq(tok: str) -> int:
     return int(server.api(tok, "GET", "/api/v1/events?wait=0&limit=1").get("seq") or 0)
 
 
+MENTION = re.compile(r"(?<![\w@])@([A-Za-z0-9][A-Za-z0-9_-]*)")
+
+
 def _thread_digest(tok: str, doc: str, root: Path | None, me: str = "") -> str:
     """Every open Thread with its replies, as the woken agent's reading list. A Thread with no
-    reply from *me* is marked: it is waiting for an answer."""
+    reply from *me* is marked: it is waiting for an answer, unless it @mentions only other handles
+    (it is theirs to answer)."""
     try:
         rows = docs.read_threads(tok, doc, open_only=True)
     except server.ServerError:
@@ -129,7 +138,11 @@ def _thread_digest(tok: str, doc: str, root: Path | None, me: str = "") -> str:
         return "No open Threads."
     lines = []
     for t in rows[:40]:
-        waiting = " (waiting for your answer)" if me and not any(r["author"] == me for r in t["replies"]) else ""
+        asked = set(MENTION.findall(str(t["body"] or "")))
+        waiting = ""
+        if me and not any(r["author"] == me for r in t["replies"]):
+            waiting = (f" (for {', '.join('@' + h for h in sorted(asked))} to answer)" if asked and me not in asked
+                       else " (waiting for your answer)")
         lines.append(f"- {t['id']} @{t['author']} on {t['where']}{waiting}: "
                      f"{' '.join(str(t['body'] or '').split())[:600]}")
         for r in t["replies"][-10:]:
@@ -165,8 +178,12 @@ def message_for(w: rules.Wake, *, me: str, digest: str) -> str:
 class Watcher:
     def __init__(self, profile: str, inject: Inject, broadcast: Optional[Broadcast] = None,
                  root: Path | None = None, *, allowed: Callable[[], bool] = lambda: False,
-                 bot_chat: Callable[..., bool] = wake_bot_chat):
+                 bot_chat: Callable[..., bool] = wake_bot_chat, host: str = docs.GATEWAY,
+                 ready: Callable[[], bool] = lambda: True):
         self.profile = profile
+        self.host = host
+        self.ready = ready  # the process's Hermes host can take an injected message
+        self._cursor_key = profile if host == docs.GATEWAY else f"{profile}@{host}"
         self.inject = inject
         self.allowed = allowed  # the person's consent to wake this profile (allow_gateway_injection)
         self.bot_chat = bot_chat
@@ -177,6 +194,10 @@ class Watcher:
         self._last_reconcile = 0.0
 
     # -- leadership: one thread per install broadcasts and reconciles
+    @property
+    def cursor_name(self) -> str:
+        return self._cursor_key
+
     def _try_lead(self) -> bool:
         if self._leader_file is not None:
             return True
@@ -191,7 +212,7 @@ class Watcher:
         return True
 
     def _cursor(self, tok: str) -> int:
-        cur = state.load(self.root)["cursors"].get(self.profile)
+        cur = state.load(self.root)["cursors"].get(self._cursor_key)
         if cur is None:
             cur = head_seq(tok)
             self._save_cursor(cur)
@@ -199,17 +220,24 @@ class Watcher:
 
     def _save_cursor(self, seq: int) -> None:
         def work(st: dict) -> None:
-            st["cursors"][self.profile] = seq
+            st["cursors"][self._cursor_key] = seq
         state.update(work, self.root)
 
-    def deliver(self, w: rules.Wake) -> dict:
-        """Wake this profile's session for *w*, or leave a notice when waking is off."""
+    def target(self, w: rules.Wake) -> tuple[str, str]:
+        """(session_key, host) of the session *w* wakes; the key is "" for none on record."""
         st = state.load(self.root)
         doc = st["docs"].get(w.doc, {})
-        if w.reason == "review" or doc.get("editor") == self.profile:
-            key = doc.get("session_key") or st["sessions"].get(self.profile, {}).get("session_key", "")
-        else:
-            key = st["sessions"].get(self.profile, {}).get("session_key", "")
+        last = st["sessions"].get(self.profile, {})
+        pick = doc if (w.reason == "review" or doc.get("editor") == self.profile) and doc.get("session_key") else last
+        key = pick.get("session_key", "")
+        return key, (pick.get("host") or docs.GATEWAY) if key else docs.GATEWAY
+
+    def deliver(self, w: rules.Wake) -> dict | None:
+        """Wake this profile's session for *w*, or leave a notice when waking is off. None: the
+        session is another process's (a gateway session, seen from the Desktop backend, or the reverse)."""
+        key, host = self.target(w)
+        if host != self.host:
+            return None
         if w.by_agent:
             def cap(s: dict) -> bool:
                 ok, hist = rules.allow_agent_wake(s["agent_wakes"].get(w.doc, []), time.time())
@@ -254,7 +282,7 @@ class Watcher:
     def _record(self, w: rules.Wake, outcome: str, key: str) -> dict:
         rec = {"at": time.time(), "profile": self.profile, "reason": w.reason, "doc": w.doc, "by": w.by,
                "action": w.action, "thread": w.thread, "seq": w.seq, "outcome": outcome,
-               "session": bool(key)}
+               "session": bool(key), "host": self.host}
         def work(s: dict) -> None:
             s.setdefault("wake_log", []).append(rec)
             s["wake_log"] = s["wake_log"][-100:]
@@ -266,7 +294,7 @@ class Watcher:
     def step(self, wait: int = POLL_WAIT) -> list[dict]:
         """One long-poll: handle what arrived, advance the cursor. Returns the wake records."""
         server.ensure_running(self.root)
-        leader = self._try_lead()
+        leader = self.host == docs.GATEWAY and self._try_lead()
         if leader and time.time() - self._last_reconcile >= accounts.GATEWAY_RECONCILE_EVERY:
             self._last_reconcile = time.time()
             try:
@@ -285,8 +313,8 @@ class Watcher:
             for ev in events:
                 editor = st["docs"].get(ev.get("doc") or "", {}).get("editor")
                 for w in rules.decide(ev, managed=managed, editor=editor):
-                    if w.profile == self.profile:
-                        out.append(self.deliver(w))
+                    if w.profile == self.profile and (rec := self.deliver(w)) is not None:
+                        out.append(rec)
             if leader and self.broadcast:
                 for doc in sorted({e.get("doc") for e in events if e.get("doc")}):
                     self.broadcast("changed", {"doc": doc, "seq": int(page.get("seq") or 0)})
@@ -294,6 +322,10 @@ class Watcher:
         return out
 
     def run(self) -> None:
+        # A process that only looks like a host (`gateway restart` run as a short-lived client) never
+        # becomes ready, so it never reads events or moves the cursor.
+        while not self.stop.is_set() and not self._ready():
+            self.stop.wait(2.0)
         backoff = 1.0
         while not self.stop.is_set():
             try:
@@ -304,7 +336,13 @@ class Watcher:
                 self.stop.wait(backoff)
                 backoff = min(backoff * 2, 60.0)
 
+    def _ready(self) -> bool:
+        try:
+            return bool(self.ready())
+        except Exception:  # noqa: BLE001 — unknown is not ready
+            return False
+
     def start(self) -> threading.Thread:
-        t = threading.Thread(target=self.run, name=f"annotary-watch-{self.profile}", daemon=True)
+        t = threading.Thread(target=self.run, name=f"annotary-watch-{self.cursor_name}", daemon=True)
         t.start()
         return t

@@ -174,6 +174,41 @@ def test_send_back_wakes_the_editors_sharing_session_and_comments_wake_nobody(he
     assert "Send back" in text and "Please explain step one." in text and "annotary_push_version" in text
 
 
+def test_a_desktop_backend_chat_is_woken_by_the_desktop_backend_and_a_gateway_chat_by_the_gateway(hermes):
+    # A remote Hermes hosts Desktop chats in its dashboard, keyed by a bare session id the gateway
+    # cannot route: injected from the gateway, the wake reached no chat and still read "woke".
+    from annotary_hermes import docs
+    accounts.reconcile()
+    gw, desk = Inbox(), Inbox()
+    ws = [watcher.Watcher("coder", gw.for_profile("coder")),
+          watcher.Watcher("coder", desk.for_profile("coder"), host=docs.DESKTOP)]
+    for w in ws:
+        w._cursor(server.owner_token())
+    remote = tools.share(tools.Caller(profile="coder", session_key="20261111_212221_fc90ed", surface="desktop",
+                                      host=docs.DESKTOP), markdown=PLAN, name="Remote")["id"]
+    local = share()["id"]
+    owner_cli("act", remote, "send-back")
+    owner_cli("act", local, "send-back")
+    drain(ws)
+    assert [k for _, _, k in desk.got] == ["20261111_212221_fc90ed"]
+    assert [k for _, _, k in gw.got] == ["sess-coder"]
+    log = [(r["doc"], r["outcome"], r["host"]) for r in state.load()["wake_log"]]
+    assert sorted(log) == sorted([(remote, "woke", "desktop"), (local, "woke", "gateway")])  # one each, never two
+
+
+def test_a_watcher_whose_host_is_not_live_reads_nothing(hermes):
+    # `gateway restart` handing off to a service looks like the gateway but never hosts it.
+    import threading
+    accounts.reconcile()
+    w = watcher.Watcher("coder", Inbox().for_profile("coder"), ready=lambda: False)
+    t = threading.Thread(target=w.run, daemon=True)
+    t.start()
+    t.join(0.5)
+    w.stop.set()
+    t.join(5)
+    assert "coder" not in state.load()["cursors"]
+
+
 def test_mention_wakes_only_the_named_bot_and_tells_it_not_to_push(hermes):
     accounts.reconcile()
     tools.list_docs(caller("bencha", "sess-bencha"))  # bencha has used Annotary from this session
@@ -360,10 +395,14 @@ def test_the_wake_digest_marks_threads_waiting_for_an_answer(hermes):
     doc = share()["id"]
     owner_cli("thread", "new", doc, "--document", "-m", "-", stdin="Survey or interviews?")
     owner_cli("thread", "new", doc, "--document", "-m", "-", stdin="Add a rollback step.")
+    owner_cli("thread", "new", doc, "--document", "-m", "-", stdin="@bencha which step matters most?")
+    owner_cli("thread", "new", doc, "--document", "-m", "-", stdin="@coder and @bencha: agree?")
     tools.reply(caller("coder"), doc=doc, thread="t2", text="Done in v1 already: step 4.")
     digest = watcher._thread_digest(server.owner_token(), doc, None, "coder")
     lines = {line.split(" ")[1]: line for line in digest.splitlines() if line.startswith("- t")}
     assert "(waiting for your answer)" in lines["t1"] and "(waiting for your answer)" not in lines["t2"]
+    # A question to another Bot is not the editor's to answer.
+    assert "(for @bencha to answer)" in lines["t3"] and "(waiting for your answer)" in lines["t4"]
 
 
 def test_a_profile_without_annotary_is_reported_once_and_never_made_editor(hermes):
