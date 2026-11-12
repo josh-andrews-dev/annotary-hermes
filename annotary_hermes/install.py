@@ -19,20 +19,20 @@ from pathlib import Path
 
 from . import paths
 
-VERSION = "v0.5.1"
+VERSION = "v0.6.0"
 BASE_URL = f"https://github.com/josh-andrews-dev/annotary/releases/download/{VERSION}"
 #: (sys.platform, machine) -> (Rust target, SHA-256 of annotary-<target>.tar.gz), from the
 #: release's sha256.sum. Each tarball also carries a GitHub build attestation
 #: (`gh attestation verify <tarball> --repo josh-andrews-dev/annotary`).
 PINS: dict[tuple[str, str], tuple[str, str]] = {
     ("darwin", "arm64"): ("aarch64-apple-darwin",
-                          "226748ef9bf7632964567d763f05bd2466b2756a94a50f66561bbaad514236c2"),
+                          "593788ed520f0ae94e8ec17f5f23f6f00aedef2e42c61cb9f614b77377b260ee"),
     ("darwin", "x86_64"): ("x86_64-apple-darwin",
-                           "a59c49ad87ec15af3eaeb3398136b25366c6464c970b0f80c78bc67af9e5ef99"),
+                           "12481b6eae60b4728033791e32e689dd15cd12017a5dc0d1fc3c49b632dd8acd"),
     ("linux", "aarch64"): ("aarch64-unknown-linux-gnu",
-                           "37de1099419a69e8f845e1ef6b01a662f070dcd8861aefca3c09c05a21f26213"),
+                           "c1689dc6b50becf220844f8ab2a49acae558e8baa59e29dc2e8b242ee1d7f275"),
     ("linux", "x86_64"): ("x86_64-unknown-linux-gnu",
-                          "475dd0e8c9421db168811774d015a8a302e9f9c01249d7a118f0964030688b4a"),
+                          "2ea91075def46908afdfe7d38b6222bccf901a471d70d5f625fab5a5f6c5afa2"),
 }
 #: Development only: run this binary instead of the pinned release (an unreleased Annotary build).
 DEV_BINARY_ENV = "ANNOTARY_HERMES_DEV_BINARY"
