@@ -98,6 +98,8 @@ test("growth fails without a reason and passes with one; a ceiling always fails"
   assert.match(mainTable, /\| Document view: bytes \| 1,000 \| 1,000 \| ±0 \(0\.0%\) \| — \| ⚠️ ceiling \|/, "a removed ceiling is in the main table");
   assert.doesNotMatch(collapsed, /Document view: bytes/, "and not in the collapsed one");
   assert.match(droppedMd, /1 number grew or had its guard weakened with no `Size growth:` line/);
+  const withReason = sr.renderComment({ base, head: dropped, baseSha: "a".repeat(40), headSha: "b".repeat(40), body: "Size growth: moved" });
+  assert.match(withReason, /⚠️ 1 number grew or had its guard weakened; the body's `Size growth:` line gives the reason\./);
   assert.equal(sr.verdict({ base, head: dropped, body: "" }).ok, false, "a removed ceiling counts as raised");
   assert.equal(sr.verdict({ base, head: dropped, body: "Size growth: the row moved" }).ok, true);
   const renamed = report({ "view.bytes": 5000 });
@@ -116,6 +118,8 @@ test("the change is absolute and in percent", () => {
   assert.equal(sr.change(2000, 1990), "−10 (−0.5%)");
   assert.equal(sr.change(5, 5), "±0 (0.0%)");
   assert.equal(sr.change(0, 3), "+3 (+new)");
+  assert.equal(sr.change(1990307, 1990443), "+136 (+<0.1%)", "a nonzero change never reads as 0.0%");
+  assert.equal(sr.change(2000, 1999), "−1 (−<0.1%)");
 });
 
 test("the comment shows main, this PR, the change and the ceiling", () => {
