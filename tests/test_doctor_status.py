@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -20,7 +21,7 @@ ADVICE = "Where Web Access cannot be switched on"
 def webapp(hermes, monkeypatch):
     """Set what `hermes webapp --status` prints and what config.yaml says."""
     def configure(status, config=""):
-        monkeypatch.setattr(cli, "_run_hermes", lambda args: subprocess.CompletedProcess(args, 0, status, ""))
+        monkeypatch.setattr(cli, "_run_hermes", lambda args, timeout=180: subprocess.CompletedProcess(args, 0, status, ""))
         if config:
             with (hermes / "config.yaml").open("a") as f:
                 f.write(config)
@@ -95,11 +96,26 @@ def test_the_merged_config_is_held_to_the_same_rules(webapp, capsys, monkeypatch
     assert ADVICE in doctor_output(capsys)
 
 
-def test_no_internal_hermes_module_is_imported():
-    """Catalog rule: only Hermes's public reads, so a core release cannot break the plugin."""
+def test_no_internal_hermes_module_or_private_context_member_is_used():
+    """Catalog rule: only Hermes's public reads, so a core release cannot break the plugin. The one
+    exception is `_host_ready`'s guarded `getattr(ctx, "_manager", None)` (docs/decisions.md)."""
     for f in [ROOT / "__init__.py", *sorted((ROOT / "annotary_hermes").glob("*.py"))]:
         text = f.read_text()
         assert "gateway.webapp_listener" not in text and "_gateway_injection_allowed" not in text, f.name
+        assert not re.search(r"\bctx\._", text), f.name
+        assert text.count('getattr(ctx, "_') == (1 if f.name == "__init__.py" else 0), f.name
+
+
+def test_hermes_rejected_hosts_and_addresses_turn_the_link_off(webapp, monkeypatch):
+    from annotary_hermes import webapp as wa
+    ok = {"enabled": True, "public_url": "https://agent.example.test"}
+    for conf, on in [({}, True), ({"host": "[::1]"}, True), ({"host": "0:0:0:0:0:0:0:1"}, True),
+                     ({"host": "0.0.0.0"}, True), ({"host": "LOCALHOST"}, True),
+                     ({"host": "192.0.2.10"}, False), ({"host": "agent.example.test"}, False),
+                     ({"port": 0}, False), ({"port": True}, False),
+                     ({"public_url": "HTTPS://agent.example.test"}, True), ({"public_url": "https://:9120"}, False)]:
+        _hermes_config(monkeypatch, {"webapp": {**ok, **conf}})
+        assert wa.settings()[0] is on, conf
 
 
 def _dashboard(name):

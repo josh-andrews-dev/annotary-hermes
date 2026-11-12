@@ -23,18 +23,23 @@ def test_the_binary_never_inherits_the_hosts_environment(hermes, monkeypatch):
 def test_consent_is_read_for_the_named_profile_and_fails_closed(monkeypatch):
     seen = []
 
-    def run(args, answer="true\n", code=0):
-        seen.append(args)
-        return subprocess.CompletedProcess(args, code, answer, "")
-    monkeypatch.setattr(cli, "_run_hermes", run)
+    def answer(stdout, code=0):
+        def run(args, timeout=180):
+            seen.append((args, timeout))
+            return subprocess.CompletedProcess(args, code, stdout, "")
+        return run
+    monkeypatch.setattr(cli, "_run_hermes", answer("true\n"))
     assert cli.wake_allowed("bencha") is True
-    assert seen[-1][:2] == ["-p", "bencha"] and seen[-1][-1] == "plugins.entries.annotary.allow_gateway_injection"
-    monkeypatch.setattr(cli, "_run_hermes", lambda args: run(args, "false\n"))
-    assert cli.wake_allowed("bencha") is False
-    monkeypatch.setattr(cli, "_run_hermes", lambda args: run(args, "true\n", 1))
-    assert cli.wake_allowed("bencha") is False
+    args, timeout = seen[-1]
+    assert args[:2] == ["-p", "bencha"] and "--json" in args
+    assert args[-1] == "plugins.entries.annotary.allow_gateway_injection"
+    assert timeout == cli.WAKE_ALLOWED_TIMEOUT < 180  # a stuck `hermes` must not hold the watcher
+    # Hermes's own check takes only the boolean: a quoted 'true' in config.yaml is no.
+    for stdout, code in [("false\n", 0), ('"true"\n', 0), ("true\n", 1), ("", 1), ("not json", 0)]:
+        monkeypatch.setattr(cli, "_run_hermes", answer(stdout, code))
+        assert cli.wake_allowed("bencha") is False, (stdout, code)
 
-    def boom(args):
-        raise subprocess.TimeoutExpired(args, 180)
+    def boom(args, timeout=180):
+        raise subprocess.TimeoutExpired(args, timeout)
     monkeypatch.setattr(cli, "_run_hermes", boom)
     assert cli.wake_allowed("bencha") is False

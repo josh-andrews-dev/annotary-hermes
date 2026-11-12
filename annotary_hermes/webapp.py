@@ -8,7 +8,7 @@ page never loads. A server-side sign-in keeps the query and drops any fragment a
 
 from __future__ import annotations
 
-import re
+import ipaddress
 import urllib.parse
 
 from . import accounts, paths
@@ -33,29 +33,47 @@ def _config() -> dict:
 
 
 def _public_url(value) -> str | None:
-    """`public_url` without a trailing slash; "" when unset; None when Hermes would reject it."""
+    """`public_url` without a trailing slash; "" when unset; None when Hermes would reject it (not an
+    http(s) address with a host, or one carrying credentials, a query or a fragment)."""
     if value is None or value == "":
         return ""
-    if not isinstance(value, str) or not re.fullmatch(r"https?://[^\s/?#@\\\"'<>]+(/[^\s?#@\\\"'<>]*)?", value):
+    if not isinstance(value, str) or any(c in value for c in "\"'<> \t\r\n?#@\\"):
         return None
+    url = value.rstrip("/")
     try:
-        port = urllib.parse.urlsplit(value).port  # a malformed port raises
+        parts = urllib.parse.urlsplit(url)
+        port = parts.port  # a malformed port raises
     except ValueError:
         return None
-    return None if port == 0 else value.rstrip("/")
+    return url if parts.scheme in {"http", "https"} and parts.hostname and port != 0 else None
+
+
+def _host_ok(value) -> bool:
+    """A bind Hermes accepts: local-only (127.0.0.1, ::1, localhost) or a wildcard (0.0.0.0, ::)."""
+    if not isinstance(value, str):
+        return False
+    host = value.strip()
+    if host.startswith("[") and host.endswith("]"):
+        host = host[1:-1]
+    try:
+        host = ipaddress.ip_address(host).compressed
+    except ValueError:
+        host = host.lower()
+    return host in {"127.0.0.1", "::1", "localhost", "0.0.0.0", "::"}
 
 
 def settings() -> tuple[bool, str]:
     """(turned on, public address), read as Hermes reads them: on only for `enabled: true` with a
-    usable port and address; "" for an address it would not use. Public config reads only, so a
-    Hermes release that moves its internals cannot break it."""
+    usable host, port and address; "" for an address it would not use. Public config reads only,
+    so a Hermes release that moves its internals cannot break it."""
     conf = _config().get("webapp")
     if not isinstance(conf, dict):
         return False, ""
     public = _public_url(conf.get("public_url"))
-    port = conf.get("port", 1)
+    port = conf.get("port", 9120)
     port_ok = isinstance(port, int) and not isinstance(port, bool) and 1 <= port <= 65535
-    return conf.get("enabled") is True and port_ok and public is not None, public or ""
+    usable = _host_ok(conf.get("host", "127.0.0.1")) and port_ok and public is not None
+    return conf.get("enabled") is True and usable, public or ""
 
 
 def doc_url(doc: str, public: str | None = None) -> str | None:

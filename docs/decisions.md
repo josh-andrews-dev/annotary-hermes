@@ -331,10 +331,15 @@ The same three guards as annotary's, so one rule reads the same in every Annotar
 - **Consent is read with `hermes -p PROFILE config get`.** Chose the public command; rejected the
   private `ctx._gateway_injection_allowed()` because it can change without notice, and the
   in-process `load_config_readonly()` because a watcher thread reads another profile's config
-  there. It runs only before a Bot Chat wake, so its cost does not matter; any failure is no.
+  there. It runs only before a Bot Chat wake, with a 20 s limit so a stuck `hermes` cannot hold
+  the watcher before it saves its cursor; only a JSON `true` (`--json`) counts, as Hermes's own
+  check takes only the boolean; any failure is no.
 - **The Webapp's address comes from `load_config_readonly()`.** Chose Hermes's public merged
   config in the root's own process (Hermes Cloud's `public_url` can come from the managed overlay
-  or `${ENV}`), the file as written elsewhere, and the plugin's own check of the address; rejected
+  or `${ENV}`), the file as written elsewhere, and the plugin's own check of `enabled`, `host`, `port` and the address, as Hermes checks them; rejected
   `gateway.webapp_listener`, an internal module, and the file alone, which loses Hermes Cloud's.
 - **The host still comes from argv.** Rejected for now a more direct signal because Hermes has no
   public one; `_host_ready` already asks the manager whether the host takes injected messages.
+- **One private reach stays: `getattr(ctx, "_manager", None)` in `_host_ready`,** guarded so a
+  Hermes without it reads as always ready; Hermes's own `private_attribute_findings` does not flag
+  it, and `test_no_internal_hermes_module_or_private_context_member_is_used` allows only this one.
