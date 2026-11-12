@@ -17,9 +17,8 @@ function workflow(file) {
 }
 
 test("the size check takes its workflow from the default branch and its script from the base", () => {
-  // pull_request goes in the next change: moved in one change, a required check runs on neither event.
   assert.deepEqual(workflow("size.yml"), {
-    triggers: ["pull_request", "pull_request_target"],
+    triggers: ["pull_request_target"],
     refs: ["${{ github.event.pull_request.base.sha }}"],
     permissions: ["contents: read"],
     runs: 0,
