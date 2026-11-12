@@ -11,15 +11,23 @@ function workflow(file) {
   return {
     triggers: [...yml.matchAll(/^ {2}([a-z_]+):\s*$/gm)].filter((m) => yml.lastIndexOf("\non:", m.index) > yml.lastIndexOf("\njobs:", m.index)).map((m) => m[1]),
     refs: [...yml.matchAll(/^\s+ref:\s*(.+?)\s*$/gm)].map((m) => m[1]),
+    permissions: /^permissions:\n((?: {2}.*\n)*)/m.exec(yml)[1].trim().split(/\n\s*/),
+    runs: [...yml.matchAll(/^\s+(?:- )?run:/gm)].length,
   };
 }
 
 test("the size check takes its workflow from the default branch and its script from the base", () => {
-  const w = workflow("size.yml");
-  assert.ok(w.triggers.includes("pull_request_target"), w.triggers.join(", "));
-  assert.deepEqual(w.refs, ["${{ github.event.pull_request.base.sha }}"]);
+  // pull_request goes in the next change: moved in one change, a required check runs on neither event.
+  assert.deepEqual(workflow("size.yml"), {
+    triggers: ["pull_request", "pull_request_target"],
+    refs: ["${{ github.event.pull_request.base.sha }}"],
+    permissions: ["contents: read"],
+    runs: 0,
+  });
 });
 
 test("the size comment takes both from the default branch", () => {
-  assert.deepEqual(workflow("size-comment.yml"), { triggers: ["pull_request_target"], refs: ["${{ github.event.repository.default_branch }}"] });
+  const w = workflow("size-comment.yml");
+  assert.deepEqual([w.triggers, w.refs, w.permissions], [["pull_request_target"], ["${{ github.event.repository.default_branch }}"],
+    ["contents: read", "pull-requests: write"]]);
 });
