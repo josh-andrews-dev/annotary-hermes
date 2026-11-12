@@ -321,6 +321,12 @@ The same three guards as annotary's, so one rule reads the same in every Annotar
   request because a required check whose workflow is not yet on `main` blocks every other open
   pull request. `size comment` stays optional: it only reports. Neither the repo standard nor the
   new-project tooling owns this list, so a new required check is added to the ruleset by hand.
+- **The `size` check runs nothing of the pull request.** Chose `pull_request_target`, with the
+  script checked out at the pull request's base and a read-only token; rejected `pull_request`
+  because it runs the pull request's own `size.yml`, and a head checkout because it runs the pull
+  request's own script: either way a pull request could loosen the check in the change that grows
+  a number. `.github/scripts/workflows.test.cjs` pins both size workflows. The move took two pull
+  requests, since a required check moved between the two events in one runs on neither for it.
 
 ## 2026-11-12: the plugin catalog's review
 

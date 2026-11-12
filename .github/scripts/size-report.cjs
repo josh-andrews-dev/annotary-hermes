@@ -166,7 +166,9 @@ function change(was, now) {
   if (was === null) return "new";
   const d = now - was;
   const sign = d > 0 ? "+" : d < 0 ? "−" : "±";
-  const pct = was === 0 ? (d === 0 ? "0.0%" : "new") : `${(Math.abs(d) / was * 100).toFixed(1)}%`;
+  const ratio = was === 0 ? 0 : (Math.abs(d) / was) * 100;
+  // A nonzero change never reads as 0.0%.
+  const pct = was === 0 ? (d === 0 ? "0.0%" : "new") : d !== 0 && ratio < 0.1 ? "<0.1%" : `${ratio.toFixed(1)}%`;
   return `${sign}${Math.abs(d).toLocaleString("en-US")} (${sign === "±" ? "" : sign}${pct})`;
 }
 
@@ -240,7 +242,7 @@ function pullOf(context) {
   return pr;
 }
 
-/** The `size` check (`pull_request`, read-only token). */
+/** The `size` check (`pull_request_target`; this file comes from the pull request's base; read-only token). */
 async function check({ github, context, core }) {
   const pr = pullOf(context);
   const { owner, repo } = context.repo;
