@@ -6,6 +6,10 @@
 checked against its SHA-256) in a throwaway Hermes root, plus the desktop page's Node tests. No
 model is called.
 
+`tests/test_size_report.py`, part of `make test`, also holds `perf/size-report.json` equal to
+what the plugin sends for a fixed set of Documents; `make size-report` rewrites it
+([`size-report.md`](size-report.md)).
+
 ## Live review loop
 
 `make live-loop` (or `python3 scripts/project/live_loop.py --profile coder`) checks a model, or a

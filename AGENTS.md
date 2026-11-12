@@ -34,3 +34,12 @@ what a change must keep.
   `desktop.retire_standalone_page`). Plain ESM importing only `@hermes/plugin-sdk`, `react`,
   `react/jsx-runtime`; no build step.
 - The repo will be public: no host names, email addresses or home paths anywhere in it.
+
+## Hit every surface
+
+A change usually fails by being missing elsewhere. Before done, walk
+[`docs/surfaces.md`](docs/surfaces.md) and fill the pull request's `## Surfaces` (the `surfaces`
+check): Desktop, the Webapp on a computer and a phone, Hermes Cloud, a remote backend, every
+profile, the tools, skill and wake-ups, the cards, the CLI, reverse states, docs, an annotary
+release. Change the other surfaces in the same run; `follows:` only for a design answer from the
+maintainer, an outside contributor, or an urgent fix.

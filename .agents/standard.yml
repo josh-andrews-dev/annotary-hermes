@@ -5,7 +5,7 @@
 # `copier update -d` (copier.yml).
 _commit: v0.17.1
 _src_path: gh:josh-andrews-dev/repo-standard
-always_loaded_budget: 7509
+always_loaded_budget: 7980
 always_loaded_extra: []
 description: 'Annotary for Hermes Agent: review your agents'' plans and documents with comments, from Desktop, the Webapp and your phone'
 kinds: []

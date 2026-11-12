@@ -1,0 +1,181 @@
+{
+  "schema": 1,
+  "fixture": {
+    "documents": 8,
+    "lines": 2126,
+    "versions": 9,
+    "threads": 80,
+    "replies": 32,
+    "profiles": 3
+  },
+  "metrics": [
+    {
+      "id": "page.plugin_js.bytes",
+      "label": "Desktop page: plugin.js",
+      "unit": "bytes",
+      "value": 25940,
+      "ceiling": 29000
+    },
+    {
+      "id": "list.requests",
+      "label": "Show the list: backend requests",
+      "unit": "count",
+      "value": 2,
+      "ceiling": 2
+    },
+    {
+      "id": "list.bytes",
+      "label": "Show the list: bytes",
+      "unit": "bytes",
+      "value": 1617,
+      "ceiling": 1800
+    },
+    {
+      "id": "list.documents.bytes",
+      "label": "Show the list: /documents",
+      "unit": "bytes",
+      "value": 1347,
+      "ceiling": null
+    },
+    {
+      "id": "list.status.bytes",
+      "label": "Show the list: /status",
+      "unit": "bytes",
+      "value": 270,
+      "ceiling": null
+    },
+    {
+      "id": "open.doc.bytes",
+      "label": "Open a Document: /doc",
+      "unit": "bytes",
+      "value": 151152,
+      "ceiling": null
+    },
+    {
+      "id": "open.shell.bytes",
+      "label": "Open a Document: /shell",
+      "unit": "bytes",
+      "value": 11689,
+      "ceiling": null
+    },
+    {
+      "id": "open.page.parts",
+      "label": "Open a Document: page parts",
+      "unit": "count",
+      "value": 2,
+      "ceiling": null
+    },
+    {
+      "id": "open.page.restarts",
+      "label": "Open a Document: page restarts (412)",
+      "unit": "count",
+      "value": 1,
+      "ceiling": null
+    },
+    {
+      "id": "open.page.requests",
+      "label": "Open a Document: page requests",
+      "unit": "count",
+      "value": 4,
+      "ceiling": null
+    },
+    {
+      "id": "open.page.bytes",
+      "label": "Open a Document: page through /proxy",
+      "unit": "bytes",
+      "value": 859958,
+      "ceiling": null
+    },
+    {
+      "id": "open.avatars",
+      "label": "Open a Document: avatars fetched",
+      "unit": "count",
+      "value": 1,
+      "ceiling": null
+    },
+    {
+      "id": "open.avatars.bytes",
+      "label": "Open a Document: avatars through /proxy",
+      "unit": "bytes",
+      "value": 9410,
+      "ceiling": null
+    },
+    {
+      "id": "open.events.bytes",
+      "label": "Open a Document: first live-feed poll",
+      "unit": "bytes",
+      "value": 136,
+      "ceiling": null
+    },
+    {
+      "id": "open.requests",
+      "label": "Open a Document: backend requests",
+      "unit": "count",
+      "value": 8,
+      "ceiling": 8
+    },
+    {
+      "id": "open.bytes",
+      "label": "Open a Document: bytes",
+      "unit": "bytes",
+      "value": 1032345,
+      "ceiling": 1200000
+    },
+    {
+      "id": "poll.requests",
+      "label": "Each 10 s poll, a Document open: requests",
+      "unit": "count",
+      "value": 3,
+      "ceiling": 3
+    },
+    {
+      "id": "poll.bytes",
+      "label": "Each 10 s poll, a Document open: bytes",
+      "unit": "bytes",
+      "value": 152769,
+      "ceiling": 170000
+    },
+    {
+      "id": "poll.events.bytes",
+      "label": "Each 4 s live-feed poll, nothing new: bytes",
+      "unit": "bytes",
+      "value": 136,
+      "ceiling": null
+    },
+    {
+      "id": "agents.skill.bytes",
+      "label": "Agents: SKILL.md",
+      "unit": "bytes",
+      "value": 4209,
+      "ceiling": 4700
+    },
+    {
+      "id": "agents.tools",
+      "label": "Agents: tools registered",
+      "unit": "count",
+      "value": 10,
+      "ceiling": null
+    },
+    {
+      "id": "agents.tools.bytes",
+      "label": "Agents: tool schemas (JSON)",
+      "unit": "bytes",
+      "value": 5242,
+      "ceiling": 5800
+    },
+    {
+      "id": "agents.wake.send_back.bytes",
+      "label": "Agents: Send back wake-up, without Threads",
+      "unit": "bytes",
+      "value": 487,
+      "ceiling": null
+    },
+    {
+      "id": "agents.wake.mention.bytes",
+      "label": "Agents: mention wake-up, without the excerpt",
+      "unit": "bytes",
+      "value": 358,
+      "ceiling": null
+    }
+  ]
+}
