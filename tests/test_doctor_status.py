@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -20,7 +21,7 @@ ADVICE = "Where Web Access cannot be switched on"
 def webapp(hermes, monkeypatch):
     """Set what `hermes webapp --status` prints and what config.yaml says."""
     def configure(status, config=""):
-        monkeypatch.setattr(cli, "_run_hermes", lambda args: subprocess.CompletedProcess(args, 0, status, ""))
+        monkeypatch.setattr(cli, "_run_hermes", lambda args, timeout=180: subprocess.CompletedProcess(args, 0, status, ""))
         if config:
             with (hermes / "config.yaml").open("a") as f:
                 f.write(config)
@@ -73,15 +74,49 @@ def test_enabled_must_be_true_not_merely_present(webapp, capsys):
     assert ADVICE in doctor_output(capsys)
 
 
-def test_hermes_own_reader_wins_when_it_is_there(webapp, capsys, monkeypatch):
-    """Inside Hermes the config can be a link, or PyYAML absent: Hermes's reader handles both."""
-    webapp("The gateway is still starting the Webapp.")
-    listener = types.ModuleType("gateway.webapp_listener")
-    listener.webapp_settings = lambda home: types.SimpleNamespace(enabled=True, public_url="https://hermes.example.test")
-    monkeypatch.setitem(sys.modules, "gateway", types.ModuleType("gateway"))
-    monkeypatch.setitem(sys.modules, "gateway.webapp_listener", listener)
+def _hermes_config(monkeypatch, conf):
+    """Run as Hermes does: its public `load_config_readonly`, the merged config of this home."""
+    mod = types.ModuleType("hermes_cli.config")
+    mod.load_config_readonly = lambda: conf
+    monkeypatch.setitem(sys.modules, "hermes_cli", types.ModuleType("hermes_cli"))
+    monkeypatch.setitem(sys.modules, "hermes_cli.config", mod)
+
+
+def test_inside_hermes_the_merged_config_wins_over_the_file(webapp, capsys, monkeypatch):
+    """Hermes Cloud's address can come from the managed overlay or `${ENV}`, never in the file."""
+    webapp("The gateway is still starting the Webapp.", "webapp:\n  enabled: false\n")
+    _hermes_config(monkeypatch, {"webapp": {"enabled": True, "public_url": "https://hermes.example.test/"}})
     out = doctor_output(capsys)
     assert ADVICE not in out and "https://hermes.example.test/?annotary=<id>." in out
+
+
+def test_the_merged_config_is_held_to_the_same_rules(webapp, capsys, monkeypatch):
+    webapp("The Webapp is not enabled.")
+    _hermes_config(monkeypatch, {"webapp": {"enabled": True, "port": 0, "public_url": "https://hermes.example.test"}})
+    assert ADVICE in doctor_output(capsys)
+
+
+def test_no_internal_hermes_module_or_private_context_member_is_used():
+    """Catalog rule: only Hermes's public reads, so a core release cannot break the plugin. The one
+    exception is `_host_ready`'s guarded `getattr(ctx, "_manager", None)` (docs/decisions.md)."""
+    for f in [ROOT / "__init__.py", *sorted((ROOT / "annotary_hermes").glob("*.py"))]:
+        text = f.read_text()
+        assert "gateway.webapp_listener" not in text and "_gateway_injection_allowed" not in text, f.name
+        assert not re.search(r"\bctx\._", text), f.name
+        assert text.count('getattr(ctx, "_') == (1 if f.name == "__init__.py" else 0), f.name
+
+
+def test_hermes_rejected_hosts_and_addresses_turn_the_link_off(webapp, monkeypatch):
+    from annotary_hermes import webapp as wa
+    ok = {"enabled": True, "public_url": "https://agent.example.test"}
+    for conf, on in [({}, True), ({"host": "[::1]"}, True), ({"host": "0:0:0:0:0:0:0:1"}, True),
+                     ({"host": "0.0.0.0"}, True), ({"host": "LOCALHOST"}, True), ({"host": "[::]"}, True),
+                     ({"host": "[localhost]"}, False), ({"host": "[127.0.0.1]"}, False),
+                     ({"host": "192.0.2.10"}, False), ({"host": "agent.example.test"}, False),
+                     ({"port": 0}, False), ({"port": True}, False),
+                     ({"public_url": "HTTPS://agent.example.test"}, True), ({"public_url": "https://:9120"}, False)]:
+        _hermes_config(monkeypatch, {"webapp": {**ok, **conf}})
+        assert wa.settings()[0] is on, conf
 
 
 def _dashboard(name):

@@ -16,9 +16,9 @@ def _hermes() -> list[str]:
     return [exe] if exe else [sys.executable, "-m", "hermes_cli.main"]
 
 
-def _run_hermes(args: list[str]) -> subprocess.CompletedProcess:
+def _run_hermes(args: list[str], timeout: float = 180) -> subprocess.CompletedProcess:
     return subprocess.run([*_hermes(), *args], capture_output=True, text=True, stdin=subprocess.DEVNULL,
-                          timeout=180)
+                          timeout=timeout)
 
 
 def _print(obj) -> None:
@@ -133,12 +133,25 @@ def enable(args) -> int:
     return 0 if ok else 1
 
 
+#: Seconds a consent read may take before it counts as no (a cold `hermes` start takes a few).
+WAKE_ALLOWED_TIMEOUT = 20
+
+
+def wake_allowed(profile: str) -> bool:
+    """Whether *profile* lets this plugin wake its chats (`allow_gateway_injection`), read through
+    `hermes -p PROFILE config get`: in a gateway thread the in-process config is another profile's.
+    Only a JSON `true` counts, as Hermes's own check takes only the boolean (a quoted 'true' is no).
+    The short timeout keeps a stuck `hermes` from holding the watcher, which has not saved its cursor."""
+    key = f"plugins.entries.{paths.PLUGIN_ID}.allow_gateway_injection"
+    try:
+        r = _run_hermes(["-p", profile, "config", "get", "--json", key], timeout=WAKE_ALLOWED_TIMEOUT)
+        return r.returncode == 0 and json.loads(r.stdout) is True
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return False
+
+
 def wake_state() -> dict:
-    out = {}
-    for pid in _profile_ids():
-        r = _run_hermes(["-p", pid, "config", "get", f"plugins.entries.{paths.PLUGIN_ID}.allow_gateway_injection"])
-        out[pid] = r.stdout.strip().lower() == "true"
-    return out
+    return {pid: wake_allowed(pid) for pid in _profile_ids()}
 
 
 def wake(args) -> int:

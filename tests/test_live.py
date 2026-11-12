@@ -4,6 +4,8 @@ import json
 import os
 import shutil
 import stat
+import time
+from pathlib import Path
 
 import pytest
 from conftest import make_profile
@@ -457,6 +459,35 @@ def test_a_current_server_is_left_alone(hermes):
     pid = server.server_pid()
     assert server.ensure_running()["outcome"] == "running"
     assert server.server_pid() == pid
+
+
+def test_a_server_an_older_plugin_started_with_the_whole_environment_is_restarted(hermes, monkeypatch):
+    """An upgrade must not leave provider keys in a server the old plugin started."""
+    import os
+    import subprocess
+    from annotary_hermes import install, paths
+    server.stop()
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-not-for-annotary")
+    old = subprocess.Popen(  # as the old plugin did: the inherited environment, no launch record
+        [str(install.bin_path()), "serve", "--data-dir", str(paths.data_dir()), "--port", str(paths.port()),
+         "--bind", "127.0.0.1"], env={**os.environ, **server.cli_env()}, stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    try:
+        for _ in range(100):
+            if server.health(0.5):
+                break
+            time.sleep(0.1)
+        out = server.ensure_running()
+        assert out["outcome"] == "started" and out["pid"] != old.pid
+        environ = Path(f"/proc/{out['pid']}/environ")
+        if environ.exists():  # Linux: read what the new server really holds
+            names = {e.split(b"=", 1)[0].decode() for e in environ.read_bytes().split(b"\0") if e}
+            assert "OPENAI_API_KEY" not in names and "ANNOTARY_HOME" in names
+        assert server.ensure_running()["outcome"] == "running"  # and it is left alone from then on
+    finally:
+        if old.poll() is None:
+            old.kill()
+        old.wait()
 
 
 def test_the_dev_override_never_triggers_a_reinstall(hermes, monkeypatch, tmp_path):

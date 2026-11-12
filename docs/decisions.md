@@ -327,3 +327,32 @@ The same three guards as annotary's, so one rule reads the same in every Annotar
   request's own script: either way a pull request could loosen the check in the change that grows
   a number. `.github/scripts/workflows.test.cjs` pins both size workflows. The move took two pull
   requests, since a required check moved between the two events in one runs on neither for it.
+
+## 2026-11-12: the plugin catalog's review
+
+- **The binary gets a minimal environment.** Chose an allowlist (`PATH`, `HOME`, `LANG`, `LC_*`,
+  `TMPDIR`, `TZ`, and the `ANNOTARY_*` and `NO_COLOR` the plugin sets); rejected copying
+  `os.environ` minus `ANNOTARY_*`, because the detached `annotary serve` then held every provider
+  key for its whole life. The Bot Chat's `hermes chat` keeps the inherited one: it needs the keys.
+- **An upgrade restarts a server the old plugin started.** Chose a launch record
+  (`server.launch`, `<pid> minimal-env`) written at each start, and a restart when the running
+  server has none; rejected reading the process's environment because macOS does not show another
+  process's environment reliably. An old copy of the plugin in another profile (doctor's
+  "different copy", fixed by `hermes annotary enable --all`) still starts the server with
+  everything after a stop, and this plugin then restarts it once; the old copy sees the binary
+  current and leaves it, so they never take turns.
+- **Consent is read with `hermes -p PROFILE config get`.** Chose the public command; rejected the
+  private `ctx._gateway_injection_allowed()` because it can change without notice, and the
+  in-process `load_config_readonly()` because a watcher thread reads another profile's config
+  there. It runs only before a Bot Chat wake, with a 20 s limit so a stuck `hermes` cannot hold
+  the watcher before it saves its cursor; only a JSON `true` (`--json`) counts, as Hermes's own
+  check takes only the boolean; any failure is no.
+- **The Webapp's address comes from `load_config_readonly()`.** Chose Hermes's public merged
+  config in the root's own process (Hermes Cloud's `public_url` can come from the managed overlay
+  or `${ENV}`), the file as written elsewhere, and the plugin's own check of `enabled`, `host`, `port` and the address, as Hermes checks them; rejected
+  `gateway.webapp_listener`, an internal module, and the file alone, which loses Hermes Cloud's.
+- **The host still comes from argv.** Rejected for now a more direct signal because Hermes has no
+  public one; `_host_ready` already asks the manager whether the host takes injected messages.
+- **One private reach stays: `getattr(ctx, "_manager", None)` in `_host_ready`,** guarded so a
+  Hermes without it reads as always ready; Hermes's own `private_attribute_findings` does not flag
+  it, and `test_no_internal_hermes_module_or_private_context_member_is_used` allows only this one.

@@ -211,7 +211,7 @@ def _start_watcher(ctx, host: str) -> None:
     profile = ctx.profile_name  # captured here: a thread started from register() sees `default`
 
     def allowed() -> bool:  # the person's consent for this profile, read from its own config
-        return bool(ctx._gateway_injection_allowed())
+        return annotary_cli.wake_allowed(profile)
 
     def inject(text: str, session_key: str) -> bool:
         if session_key:

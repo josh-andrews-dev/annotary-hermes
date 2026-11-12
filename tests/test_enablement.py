@@ -264,7 +264,7 @@ class FakeHermes:
     def disable(self, pid):
         self.write(pid, [], ["annotary"])
 
-    def __call__(self, args):
+    def __call__(self, args, timeout=180):
         if args[2:4] == ["plugins", "enable"]:
             pid = args[1]
             if pid in self.fail or not (self.home(pid) / "plugins" / "annotary").exists():

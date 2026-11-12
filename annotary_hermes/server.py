@@ -50,10 +50,16 @@ def owner_handle(root: Path | None = None) -> str:
     return _secrets(root).get("owner_handle", "")
 
 
+#: All the binary is given of the host's environment: never the inherited one, which holds the
+#: person's provider keys and would stay in the detached `annotary serve` for its whole life.
+_ENV_KEEP = ("PATH", "HOME", "LANG", "TMPDIR", "TZ")
+_ENV_KEEP_PREFIXES = ("LC_",)
+
+
 def cli_env(token: str | None = None, root: Path | None = None) -> dict:
-    """The environment for the bundled CLI and server: our data dir and server, never ~/.annotary,
-    no update check (nothing leaves the machine), and the Token in the environment only."""
-    env = {k: v for k, v in os.environ.items() if not k.startswith("ANNOTARY_")}
+    """The environment for the bundled CLI and server: a minimal one, our data dir and server, never
+    ~/.annotary, no update check (nothing leaves the machine), and the Token in the environment only."""
+    env = {k: v for k, v in os.environ.items() if k in _ENV_KEEP or k.startswith(_ENV_KEEP_PREFIXES)}
     env["ANNOTARY_HOME"] = str(paths.data_dir(root))
     env["ANNOTARY_SERVER"] = paths.server_url()
     env["ANNOTARY_UPDATE_CHECK"] = "off"
@@ -204,6 +210,25 @@ def _pid_file(root: Path | None = None) -> Path:
     return paths.app_dir(root) / "server.pid"
 
 
+def _launch_file(root: Path | None = None) -> Path:
+    """`<pid> minimal-env`, written when this plugin starts the server. A server without it was
+    started by an older plugin, which passed the host's whole environment, provider keys included."""
+    return paths.app_dir(root) / "server.launch"
+
+
+_LAUNCH_MARK = "minimal-env"
+
+
+def _launched_minimal(root: Path | None) -> bool:
+    pid = server_pid(root)
+    if not pid or not _is_our_server(pid, root):
+        return True  # no process of ours to compare
+    try:
+        return _launch_file(root).read_text().split() == [str(pid), _LAUNCH_MARK]
+    except OSError:
+        return False
+
+
 def log_file(root: Path | None = None) -> Path:
     d = paths.data_dir(root) / "logs"
     d.mkdir(parents=True, exist_ok=True)
@@ -211,11 +236,13 @@ def log_file(root: Path | None = None) -> Path:
 
 
 def _current(h: dict | None, root: Path | None) -> bool:
-    """The server answers, is set up for this plugin, and runs the binary this plugin pins (or
-    the dev override, whatever its version)."""
+    """The server answers, is set up for this plugin, was started with the minimal environment, and
+    runs the binary this plugin pins (or the dev override, whatever its version)."""
     if not (h and h.get("ok") and _secrets(root).get("owner_token")):
         return False
     if not install.installed(root)["ok"]:
+        return False
+    if not _launched_minimal(root):
         return False
     if install.dev_binary():
         return True
@@ -262,6 +289,7 @@ def ensure_running(root: Path | None = None) -> dict:
             start_new_session=True, close_fds=True, cwd=str(paths.data_dir(root)))
         log.close()
         _pid_file(root).write_text(str(proc.pid))
+        _launch_file(root).write_text(f"{proc.pid} {_LAUNCH_MARK}\n")
         for _ in range(150):
             h = health(0.5)
             if h and h.get("ok"):
@@ -313,4 +341,5 @@ def stop(root: Path | None = None) -> dict:
             break
         time.sleep(0.1)
     _pid_file(root).unlink(missing_ok=True)
+    _launch_file(root).unlink(missing_ok=True)
     return {"stopped": True, "pid": pid}
