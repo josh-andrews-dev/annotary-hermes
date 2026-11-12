@@ -263,6 +263,17 @@ is in the maintainer's private plan.
   wake a Bot, and a mention wake says not to resolve the asker's Thread; rejected a lower cap,
   which would still spend the person's turns on chatter.
 
+## 2026-11-12: Annotary v0.6.0
+
+- **Pinned Annotary v0.6.0.** Its one change is a new read route, `GET /api/v1/docs/{id}/diff`
+  (two Versions' diff as JSON); the plugin does not call it, and the embedded list and Document
+  pages, the embed contract and the CLI are unchanged, so `FRAME_ACTIONS_MIN_WIDTH` and
+  `PART_MAX` stay. Each tarball was checked against the release's `sha256.sum` and with
+  `gh attestation verify` (built by annotary's `release.yml` at `refs/tags/v0.6.0`). Chose to move
+  now; rejected waiting for a release that changes something the plugin uses, because the pin
+  should not fall behind. Every installed plugin downloads the new binary and restarts its private
+  server on its next call.
+
 ## 2026-11-11: Annotary v0.5.1
 
 - **Pinned Annotary v0.5.1** so a dollar amount stays text: its renderer no longer lets a `$`
