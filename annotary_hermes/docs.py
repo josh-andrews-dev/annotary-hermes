@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from pathlib import Path
 
@@ -13,11 +14,17 @@ from . import accounts, enablement, server, state
 GATEWAY, DESKTOP = "gateway", "desktop"
 
 
+def where(host: str) -> dict:
+    """The host fields stored with a session key: a Desktop backend also names its process, since
+    a Mac can run more than one (a `dashboard` and an `--isolated` `serve`)."""
+    return {"host": host, "pid": os.getpid()} if host == DESKTOP else {"host": host, "pid": None}
+
+
 def record_share(doc: str, *, name: str, profile: str, session_key: str, surface: str, path: str,
                  host: str = GATEWAY, root: Path | None = None) -> None:
     def work(st: dict) -> None:
         st["docs"][doc] = {"name": name, "editor": profile, "session_key": session_key,
-                           "surface": surface, "host": host, "path": path, "shared_at": time.time()}
+                           "surface": surface, **where(host), "path": path, "shared_at": time.time()}
     state.update(work, root)
 
 
@@ -30,11 +37,12 @@ def set_editor(doc: str, profile: str, *, session_key: str = "", host: str = GAT
     def work(st: dict) -> dict:
         entry = st["docs"].setdefault(doc, {})
         entry["editor"] = profile
-        key, where = session_key, host
-        if not key:
+        if session_key:
+            entry.update(session_key=session_key, **where(host))
+        else:
             last = st["sessions"].get(profile, {})
-            key, where = last.get("session_key", ""), last.get("host") or GATEWAY
-        entry["session_key"], entry["host"] = key, where
+            entry.update(session_key=last.get("session_key", ""), host=last.get("host") or GATEWAY,
+                         pid=last.get("pid"))
         entry["handed_off_at"] = time.time()
         return dict(entry)
     return state.update(work, root)
@@ -77,7 +85,7 @@ def note_session(profile: str, session_key: str, surface: str, host: str = GATEW
     if not session_key:
         return
     def work(st: dict) -> None:
-        st["sessions"][profile] = {"session_key": session_key, "surface": surface, "host": host,
+        st["sessions"][profile] = {"session_key": session_key, "surface": surface, **where(host),
                                    "at": time.time()}
     state.update(work, root)
 

@@ -405,7 +405,7 @@ def push_version(c: Caller, *, doc: str, path: str = "", markdown: str = "", mes
                        root, cwd=file.parent)
     if c.session_key:
         def work(st: dict) -> None:
-            st["docs"].setdefault(doc_id, {}).update(session_key=c.session_key, host=c.host)
+            st["docs"].setdefault(doc_id, {}).update(session_key=c.session_key, **docs.where(c.host))
             st["docs"][doc_id]["path"] = str(file)
         state.update(work, root)
     return {**pushed, **_present(c, doc_id),

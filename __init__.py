@@ -101,14 +101,26 @@ SCHEMAS = {
 }
 
 
-def _host_process() -> str:
+def _host_process(argv: list[str] | None = None) -> str:
     """The Hermes host this process may be: the gateway (`gateway run`, or `gateway restart` with no
-    service, which Desktop's Restart gateway leaves running the gateway itself), the dashboard (a
-    remote Hermes's Desktop backend, which hosts Desktop chats), or "" (any other command)."""
-    argv = [a for a in sys.argv[1:] if not a.startswith("-")]
-    if "gateway" in argv and argv[argv.index("gateway") + 1: argv.index("gateway") + 2] in (["run"], ["restart"]):
-        return GATEWAY
-    return DESKTOP if "dashboard" in argv else ""
+    service, which Desktop's Restart gateway leaves running the gateway itself), a Desktop backend
+    (`dashboard` or `serve`, which host a remote Hermes's Desktop chats), or "" (any other command)."""
+    args = list(sys.argv[1:] if argv is None else argv)
+    words, i = [], 0
+    while i < len(args):
+        a = args[i]
+        if a in ("-p", "--profile"):  # the profile's name is not the command
+            i += 2
+            continue
+        if not a.startswith("-"):
+            words.append(a)
+        i += 1
+    if words[:1] == ["gateway"]:
+        return GATEWAY if words[1:2] in (["run"], ["restart"]) else ""
+    if words[:1] in (["dashboard"], ["serve"]):
+        lifecycle = {"--stop", "--status"} & set(args) or words[1:2] == ["register"]
+        return "" if lifecycle else DESKTOP
+    return ""
 
 
 def _host_ready(ctx, host: str) -> Callable[[], bool]:

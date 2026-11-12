@@ -4,9 +4,10 @@ Each profile's thread acts only on wake-ups for its own profile, because Hermes 
 inject only into its own profile's sessions. One thread (whichever holds the leader lock) also
 broadcasts live updates to Desktop and Webapp windows and runs the 5-minute reconcile.
 
-It runs in the gateway, and also in the dashboard: a remote Hermes hosts Desktop chats in the
-dashboard's own Desktop backend, and only that process can inject into them. Each copy wakes only
-the sessions its process holds (`docs.GATEWAY` or `docs.DESKTOP`) and keeps its own cursor.
+It runs in the gateway, and also in each Desktop backend (`hermes dashboard` or `hermes serve`): a
+remote Hermes hosts Desktop chats there, and only that process can inject into them. Each copy keeps
+its own cursor. The first copy to see a wake-up fixes its route in `state["routes"]` and exactly one
+copy claims it there (see `Watcher._owns`), however the session's host changes afterwards.
 """
 
 from __future__ import annotations
@@ -28,6 +29,11 @@ from . import accounts, docs, paths, rules, server, state
 
 log = logging.getLogger("annotary_hermes")
 POLL_WAIT = 25  # seconds a long-poll parks (Annotary caps it at 30)
+#: Hermes's own session ids (`hermes_state_ids.new_session_id`): the key of a Desktop-backend chat,
+#: or a classic CLI's. The gateway cannot route one: it accepts it, then logs "not routed".
+BARE_SESSION_ID = re.compile(r"^\d{8}_\d{6}_[0-9a-f]{6,12}$")
+ROUTES_KEEP = 500
+DESKTOP_BEAT = 90  # seconds a Desktop backend's watcher counts as running after its last poll
 
 Inject = Callable[[str, str], bool]  # (text, session_key) -> accepted
 Broadcast = Callable[[str, dict], None]  # (event name, payload)
@@ -119,6 +125,20 @@ def wake_bot_chat(profile: str, text: str, root: Path | None = None, *, spawn=su
     return True
 
 
+def _alive(pid: int) -> bool:
+    if pid <= 0:  # 0 and negatives name process groups
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except (OSError, ValueError, OverflowError):
+        return False
+    return True
+
+
 def head_seq(tok: str) -> int:
     return int(server.api(tok, "GET", "/api/v1/events?wait=0&limit=1").get("seq") or 0)
 
@@ -128,17 +148,18 @@ MENTION = re.compile(r"(?<![\w@])@([A-Za-z0-9][A-Za-z0-9_-]*)")
 
 def _thread_digest(tok: str, doc: str, root: Path | None, me: str = "") -> str:
     """Every open Thread with its replies, as the woken agent's reading list. A Thread with no
-    reply from *me* is marked: it is waiting for an answer, unless it @mentions only other handles
-    (it is theirs to answer)."""
+    reply from *me* is marked: it is waiting for an answer, unless it @mentions other Bots and not
+    *me* (it is theirs to answer)."""
     try:
         rows = docs.read_threads(tok, doc, open_only=True)
     except server.ServerError:
         rows = []
     if not rows:
         return "No open Threads."
+    bots = {m.get("handle") for m in state.load(root)["members"].values()}
     lines = []
     for t in rows[:40]:
-        asked = set(MENTION.findall(str(t["body"] or "")))
+        asked = set(MENTION.findall(str(t["body"] or ""))) & bots
         waiting = ""
         if me and not any(r["author"] == me for r in t["replies"]):
             waiting = (f" (for {', '.join('@' + h for h in sorted(asked))} to answer)" if asked and me not in asked
@@ -223,21 +244,68 @@ class Watcher:
             st["cursors"][self._cursor_key] = seq
         state.update(work, self.root)
 
-    def target(self, w: rules.Wake) -> tuple[str, str]:
-        """(session_key, host) of the session *w* wakes; the key is "" for none on record."""
-        st = state.load(self.root)
+    def _target(self, st: dict, w: rules.Wake) -> dict:
+        """The session *w* wakes: its key ("" for none on record), host and Desktop-backend pid."""
         doc = st["docs"].get(w.doc, {})
         last = st["sessions"].get(self.profile, {})
         pick = doc if (w.reason == "review" or doc.get("editor") == self.profile) and doc.get("session_key") else last
         key = pick.get("session_key", "")
-        return key, (pick.get("host") or docs.GATEWAY) if key else docs.GATEWAY
+        # Recorded before hosts were: a bare session id came from a Desktop backend.
+        host = pick.get("host") or (docs.DESKTOP if BARE_SESSION_ID.match(key) else docs.GATEWAY)
+        return {"key": key, "host": host if key else docs.GATEWAY, "pid": pick.get("pid") if key else None}
+
+    def _live_desktops(self, st: dict) -> set[int]:
+        now = time.time()
+        return {int(pid) for pid, at in st["desktop_watchers"].items()
+                if now - at < DESKTOP_BEAT and _alive(int(pid))}
+
+    def _owns(self, route: dict, st: dict) -> bool:
+        """Whether this copy delivers *route*. A gateway session: the gateway's. A Desktop backend's:
+        that backend's, or, when its process has no running watcher, any running backend's (the chat
+        may be open there again); with none running, the gateway's, which wakes the Bot Chat."""
+        if route["host"] == docs.GATEWAY:
+            return self.host == docs.GATEWAY
+        live = self._live_desktops(st)
+        if self.host == docs.GATEWAY:
+            return not live
+        return route.get("pid") == os.getpid() or route.get("pid") not in live
+
+    def _claim(self, w: rules.Wake) -> dict | None:
+        wid = f"{w.profile}:{w.seq}:{w.reason}:{w.doc}:{w.thread}"
+
+        def work(st: dict) -> dict | None:
+            routes = st["routes"]
+            route = routes.get(wid)
+            if route is None:
+                route = routes[wid] = {**self._target(st, w), "at": time.time()}
+                for old in sorted(routes, key=lambda k: routes[k].get("at", 0))[:max(0, len(routes) - ROUTES_KEEP)]:
+                    del routes[old]
+            if route.get("by") or not self._owns(route, st):
+                return None
+            route["by"] = self.host
+            return dict(route)
+        return state.update(work, self.root)
+
+    def _beat(self) -> None:
+        if self.host != docs.DESKTOP:
+            return
+        def work(st: dict) -> None:
+            beats = st["desktop_watchers"]
+            beats[str(os.getpid())] = time.time()
+            for pid in [p for p, at in beats.items() if time.time() - at >= DESKTOP_BEAT]:
+                del beats[pid]
+        state.update(work, self.root)
 
     def deliver(self, w: rules.Wake) -> dict | None:
-        """Wake this profile's session for *w*, or leave a notice when waking is off. None: the
-        session is another process's (a gateway session, seen from the Desktop backend, or the reverse)."""
-        key, host = self.target(w)
-        if host != self.host:
+        """Wake this profile's session for *w*, or leave a notice when waking is off. None: another
+        copy of the watcher delivers it (or already has)."""
+        route = self._claim(w)
+        if route is None:
             return None
+        key = route["key"]
+        # The gateway cannot route a Desktop backend's (or any bare) session id: straight to the Bot Chat.
+        unroutable = self.host == docs.GATEWAY and bool(key) and (
+            route["host"] == docs.DESKTOP or bool(BARE_SESSION_ID.match(key)))
         if w.by_agent:
             def cap(s: dict) -> bool:
                 ok, hist = rules.allow_agent_wake(s["agent_wakes"].get(w.doc, []), time.time())
@@ -251,7 +319,7 @@ class Watcher:
         text = message_for(w, me=me, digest=digest)
         ok = False
         try:
-            ok = bool(self.inject(text, key))
+            ok = False if unroutable else bool(self.inject(text, key))
             # No live chat of this Bot (it never used Annotary, or that chat is gone): its Bot Chat.
             if not ok and self._consented():
                 ok = bool(self.bot_chat(self.profile, text, self.root, on_fail=lambda: self._notify(w, me)))
@@ -294,6 +362,7 @@ class Watcher:
     def step(self, wait: int = POLL_WAIT) -> list[dict]:
         """One long-poll: handle what arrived, advance the cursor. Returns the wake records."""
         server.ensure_running(self.root)
+        self._beat()
         leader = self.host == docs.GATEWAY and self._try_lead()
         if leader and time.time() - self._last_reconcile >= accounts.GATEWAY_RECONCILE_EVERY:
             self._last_reconcile = time.time()

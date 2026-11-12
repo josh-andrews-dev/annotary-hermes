@@ -445,8 +445,17 @@ def registered():
     # Desktop's Restart gateway on a Hermes with no service leaves this process running the gateway.
     (["hermes", "-p", "default", "gateway", "restart", "--interrupt"], "gateway"),
     (["hermes", "dashboard", "--host", "0.0.0.0", "--port", "9119", "--no-open"], "desktop"),
+    # What Hermes Desktop spawns, locally and on an SSH remote.
+    (["hermes", "serve", "--port", "0"], "desktop"),
+    (["hermes", "-p", "work", "serve", "--isolated"], "desktop"),
     (["hermes", "gateway", "status"], ""),
     (["hermes", "chat", "-Q"], ""),
+    # A profile named like a command, and the lifecycle clients, host nothing.
+    (["hermes", "-p", "serve", "gateway", "run"], "gateway"),
+    (["hermes", "--profile", "dashboard", "chat"], ""),
+    (["hermes", "dashboard", "--stop"], ""),
+    (["hermes", "serve", "--status"], ""),
+    (["hermes", "dashboard", "register"], ""),
 ])
 def test_the_watcher_runs_in_each_process_that_hosts_chats(monkeypatch, argv, host):
     plugin = plugin_module()

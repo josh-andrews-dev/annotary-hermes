@@ -41,7 +41,7 @@ def locked(name: str, root: Path | None = None, *, blocking: bool = True) -> Ite
 
 def _empty() -> dict:
     return {"members": {}, "docs": {}, "sessions": {}, "pending": {}, "agent_wakes": {},
-            "hinted": {}, "cursors": {}}
+            "hinted": {}, "cursors": {}, "routes": {}, "desktop_watchers": {}}
 
 
 def _read(root: Path | None = None) -> dict:

@@ -273,15 +273,22 @@ is in the maintainer's private plan.
 
 ## 2026-11-11: Wake-ups for Desktop chats on a remote Hermes
 
-- **A second watcher in the dashboard.** A remote Hermes (Hermes Cloud) hosts Desktop chats in the
-  dashboard's own Desktop backend, keyed by a bare session id. Only that process can inject into
-  them: from the gateway, Hermes accepted the message, then logged "not routed", and the wake read
-  "woke". Chose to record which process holds each session (`host`: gateway or desktop) and to run a
-  watcher in each, each waking only its own sessions with its own cursor; rejected forwarding wakes
-  from the gateway to the dashboard, which would need a private channel between the two. Only the
-  gateway's watcher leads (broadcast, reconcile).
-- **A watcher starts in `gateway run`, `gateway restart` and `dashboard`, and reads nothing until
-  Hermes's injector is live there.** Desktop's Restart gateway, on a Hermes with no service, leaves
-  `gateway restart` running the gateway itself, so wake-ups stopped until the next terminal
-  restart. A `gateway restart` that only asks a service to restart never gets the injector, so its
-  watcher never moves the cursor.
+- **A watcher in each Desktop backend too.** A remote Hermes (Hermes Cloud) hosts Desktop chats in
+  its Desktop backend (`hermes dashboard`, or `hermes serve`, which Desktop spawns), keyed by a bare
+  session id. Only that process can inject into them: from the gateway, Hermes accepted the message,
+  then logged "not routed", and the wake read "woke". Chose to record which process holds each
+  session (`host`, and a Desktop backend's `pid`, since a Mac can run two) and to run a watcher in
+  each, with its own cursor; rejected forwarding wakes from the gateway to the backend, which would
+  need a private channel between them. Only the gateway's watcher leads (broadcast, reconcile).
+- **Each wake-up is routed once and claimed once**, in `state["routes"]`: the first watcher to see it
+  fixes its target, and only its owner delivers. Rejected letting each watcher read the session's
+  host when it reaches the event: a Bot that changes chats between two watchers' polls lost or
+  doubled the wake. A Desktop backend's session falls to any running backend when its own has no
+  running watcher (the chat may be open there again), and to the gateway, which wakes the Bot Chat,
+  when none runs. The gateway never injects a bare session id; a key recorded before hosts were is
+  read as a Desktop backend's when it has that shape.
+- **A watcher starts in `gateway run`, `gateway restart`, `dashboard` and `serve`, and reads nothing
+  until Hermes's injector is live there.** Desktop's Restart gateway, on a Hermes with no service,
+  leaves `gateway restart` running the gateway itself, so wake-ups stopped until the next terminal
+  restart. A `gateway restart` that only asks a service to restart, `--stop`/`--status` and
+  `dashboard register` never get the injector, so their watchers never move the cursor.
