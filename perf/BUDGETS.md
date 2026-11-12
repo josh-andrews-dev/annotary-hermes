@@ -19,8 +19,8 @@ the growth check alone.
 | `page.plugin_js.bytes` | Desktop page: plugin.js | 29,000 | bytes | 25,940 |
 | `list.requests` | Show the list: backend requests | 2 | count | 2 |
 | `list.bytes` | Show the list: bytes | 1,800 | bytes | 1,617 |
-| `open.requests` | Open a Document: backend requests | 7 | count | 7 |
-| `open.bytes` | Open a Document: bytes | 1,200,000 | bytes | 1,032,209 |
+| `open.requests` | Open a Document: backend requests | 8 | count | 8 |
+| `open.bytes` | Open a Document: bytes | 1,200,000 | bytes | 1,032,345 |
 | `poll.requests` | Each 10 s poll, a Document open: requests | 3 | count | 3 |
 | `poll.bytes` | Each 10 s poll, a Document open: bytes | 170,000 | bytes | 152,769 |
 | `agents.skill.bytes` | Agents: SKILL.md | 4,700 | bytes | 4,209 |

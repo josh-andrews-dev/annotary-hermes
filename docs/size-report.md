@@ -38,19 +38,20 @@ uncompressed. Each route is called as the page calls it (`desktop/plugin.js`).
 - `open.*`: opening the review Document in embed mode. The review bar's `/doc`, the frame's
   `/shell`, then the frame's own requests through `/proxy` as annotary's `embed.js` makes them: the
   page with `Accept: text/html` and fixed zone headers, part 0 and then each part with its etag, a
-  `412` starting over (`open.page.restarts`), and then each avatar URL in the page
-  (`data-cd-av`) once, as bytes, as `app.js` does.
+  `412` starting over (`open.page.restarts`), then each avatar URL in the page (`data-cd-av`)
+  once, as bytes, and the first poll of the live feed from the page's `seq`
+  (`/api/v1/events?doc=…&since=…&me=1&limit=200`), as `app.js` does.
 - `poll.*`: what the page loads again every 10 s (`POLL_MS`) while a Document is open: the list's
-  two routes and the review bar's `/doc`.
+  two routes and the review bar's `/doc`. `poll.events.bytes` is the frame's own live-feed poll,
+  every 4 s (`EMBED_POLL_MS`) while the frame is visible, when nothing has changed.
 - `agents.*`: what is sent to a model. `SKILL.md` on disk; the tool schemas as registered, one
   compact JSON list; the wake-up message for a Send back and for an @mention with no Threads or
   excerpt, so the numbers are the fixed text alone.
 
 ## What is not counted, and why
 
-- The frame's work after the page is drawn: the events long-poll (every 4 s while visible) waits
-  for an event, so its size is the event's and not the plugin's. Image Assets (`data-cd-src`) are
-  not in the fixture.
+- A live-feed poll that carries events: its size is the events', not the plugin's. Image Assets
+  (`data-cd-src`) are not in the fixture.
 - Anything only a browser does: running the page's scripts, Hermes's own page and its SDK, and
   what Hermes adds around a backend answer (its sign-in, its gateway bridge).
 - The chat card: it calls `/doc`, already counted as `open.doc.bytes`.

@@ -315,4 +315,4 @@ The same three guards as annotary's, so one rule reads the same in every Annotar
   value as its ceiling: one more request is more than 10%.
 - **A `## Surfaces` section on `feat`, `fix` and `perf` pull requests (D3),** with annotary's five
   names; the checklist is `docs/surfaces.md`, and `AGENTS.md` carries a short pointer (the
-  always-loaded ratchet raised by its 527 bytes).
+  always-loaded ratchet raised from 7,509 to the 7,980 bytes now measured).

@@ -207,3 +207,13 @@ test("a report that is not valid data is never echoed", async () => {
   assert.match(body, /is not a valid size report/);
   assert.doesNotMatch(body, /everyone|script/);
 });
+
+test("an invalid base report is named, never shown as no base", async () => {
+  const [baseSha, headSha] = ["b".repeat(40), "c".repeat(40)];
+  const f = fakeGithub({ [baseSha]: "{", [headSha]: JSON.stringify(report()) });
+  f.github.rest.pulls.get = async () => ({ data: { head: { sha: headSha }, base: { sha: baseSha }, body: "" } });
+  await sr.publish({ github: f.github, context: context(), core: fakeCore() });
+  const body = f.calls[0][1].body;
+  assert.match(body, /at `bbbbbbb` is not a valid size report/);
+  assert.doesNotMatch(body, /No number grew|no size report yet/);
+});

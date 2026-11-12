@@ -101,17 +101,24 @@
       "ceiling": null
     },
     {
+      "id": "open.events.bytes",
+      "label": "Open a Document: first live-feed poll",
+      "unit": "bytes",
+      "value": 136,
+      "ceiling": null
+    },
+    {
       "id": "open.requests",
       "label": "Open a Document: backend requests",
       "unit": "count",
-      "value": 7,
-      "ceiling": 7
+      "value": 8,
+      "ceiling": 8
     },
     {
       "id": "open.bytes",
       "label": "Open a Document: bytes",
       "unit": "bytes",
-      "value": 1032209,
+      "value": 1032345,
       "ceiling": 1200000
     },
     {
@@ -127,6 +134,13 @@
       "unit": "bytes",
       "value": 152769,
       "ceiling": 170000
+    },
+    {
+      "id": "poll.events.bytes",
+      "label": "Each 4 s live-feed poll, nothing new: bytes",
+      "unit": "bytes",
+      "value": 136,
+      "ceiling": null
     },
     {
       "id": "agents.skill.bytes",

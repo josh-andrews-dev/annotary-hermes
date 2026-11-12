@@ -6,7 +6,7 @@ It counts the desktop page's own bytes, what the agents are told (the skill file
 schemas, the wake-up messages), and the plugin backend's answers (`dashboard/plugin_api.py`,
 rendered as FastAPI sends them) to show the list and to open one Document, against the real
 pinned `annotary serve` with a fixed seeded set of Documents. How each number is counted:
-docs/dev/size-report.md.
+docs/size-report.md.
 
 Set up as on Hermes Cloud (the OS user `hermes`), so the person is `@owner` on every machine.
 Two things in an answer depend on the run, not the code, and are normalized before counting:
@@ -188,7 +188,8 @@ def measure(backend: Backend, doc: str) -> list[dict]:
     add("list.status.bytes", "Show the list: /status", "bytes", backend.log[start + 1][1])
 
     # Open one Document in embed mode: the review bar's /doc, the frame shell, then the frame's
-    # requests: the page (in parts when over annotary's PART_MAX), and each avatar it fetches.
+    # requests: the page (in parts when over annotary's PART_MAX), each avatar it fetches, and the
+    # first poll of its live feed.
     start = len(backend.log)
     backend.call("/doc", api.doc(doc))
     add("open.doc.bytes", "Open a Document: /doc", "bytes", backend.log[-1][1])
@@ -210,12 +211,19 @@ def measure(backend: Backend, doc: str) -> list[dict]:
     an, ab = total(avatar_start)
     add("open.avatars", "Open a Document: avatars fetched", "count", an)
     add("open.avatars.bytes", "Open a Document: avatars through /proxy", "bytes", ab)
+    # app.js's subscribe, on a Document page: transport.events polls the feed at once from the
+    # page's seq, then every EMBED_POLL_MS (4 s) from the answer's seq.
+    data = json.loads(re.search(r'<script type="application/json" id="cd-data">(.*?)</script>', html, re.S).group(1))
+    feed = f"/api/v1/events?doc={doc}&since={{}}&me=1&limit=200"
+    first_poll = backend.proxy(feed.format(data["seq"]), {"Accept": "application/json"})
+    assert first_poll["status"] == 200, first_poll["status"]
+    add("open.events.bytes", "Open a Document: first live-feed poll", "bytes", backend.log[-1][1])
     n, b = total(start)
     add("open.requests", "Open a Document: backend requests", "count", n)
     add("open.bytes", "Open a Document: bytes", "bytes", b)
 
-    # Every POLL_MS while that Document is open, the list and the review bar load again (useLive).
-    # The frame's own long-poll of the events URL is not counted: it waits for an event.
+    # Every POLL_MS (10 s) while that Document is open, the list and the review bar load again
+    # (useLive); every 4 s, the frame polls its live feed, empty while nothing changes.
     start = len(backend.log)
     backend.call("/documents", api.docs())
     backend.call("/status", api.status())
@@ -223,6 +231,10 @@ def measure(backend: Backend, doc: str) -> list[dict]:
     n, b = total(start)
     add("poll.requests", "Each 10 s poll, a Document open: requests", "count", n)
     add("poll.bytes", "Each 10 s poll, a Document open: bytes", "bytes", b)
+    seq = max(int(json.loads(first_poll["body"]).get("seq") or 0), int(data["seq"]))
+    again = backend.proxy(feed.format(seq), {"Accept": "application/json"})
+    assert again["status"] == 200 and not json.loads(again["body"]).get("events"), again
+    add("poll.events.bytes", "Each 4 s live-feed poll, nothing new: bytes", "bytes", backend.log[-1][1])
 
     # What the agents are told: sent to a model on every session, or on every wake-up.
     add("agents.skill.bytes", "Agents: SKILL.md", "bytes", (ROOT / "skills" / "annotary" / "SKILL.md").stat().st_size)

@@ -275,15 +275,18 @@ async function publish({ github, context, core }) {
   const headSha = now.head.sha;
   const baseSha = now.base.sha;
   let body;
+  // fetchReport returns null only for a missing file; any other failure names the report it read.
+  let at = headSha;
   try {
     const head = await fetchReport(github, owner, repo, headSha);
-    const base = head ? await fetchReport(github, owner, repo, baseSha).catch(() => null) : null;
+    at = baseSha;
+    const base = head ? await fetchReport(github, owner, repo, baseSha) : null;
     body = head
       ? renderComment({ base, head, baseSha, headSha, body: now.body })
       : renderComment({ problem: `This pull request has no \`${REPORT_PATH}\` at \`${sha7(headSha)}\`.` });
   } catch (e) {
     core.warning(String(e.message || e));
-    body = renderComment({ problem: `\`${REPORT_PATH}\` at \`${sha7(headSha)}\` is not a valid size report.` });
+    body = renderComment({ problem: `\`${REPORT_PATH}\` at \`${sha7(at)}\` is not a valid size report.` });
   }
   await upsertComment(github, owner, repo, pr.number, body);
   core.info(`Size report comment on #${pr.number} is up to date.`);
