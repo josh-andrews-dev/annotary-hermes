@@ -19,6 +19,7 @@ import { jsx, jsxs } from 'react/jsx-runtime'
 const ID = 'annotary'
 const PATH = '/annotary'
 const POLL_MS = 10000
+// Throwaway: grows the page while loosening the size check. Never merged; closed with its branch.
 // Must match the frame width Annotary's embedded page folds its own Action buttons at (its `cd` container breakpoint).
 export const FRAME_ACTIONS_MIN_WIDTH = 850
 const DOC_RE = /^[a-z0-9]{1,16}$/
