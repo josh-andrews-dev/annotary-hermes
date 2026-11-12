@@ -2,7 +2,7 @@
 # upgrade never changes it. The Makefile's `make <name>` runs `project-<name>` here.
 # A placeholder that passes says so; a placeholder for something that ships fails.
 
-.PHONY: project-build project-test project-lint project-ci validate live-loop
+.PHONY: project-build project-test project-lint project-ci validate live-loop size-check size-report
 
 PYTEST = uvx --python 3.12 --from 'pytest>=8,<9' --with 'pyyaml>=6,<7' --with 'fastapi>=0.110,<1' pytest -q --import-mode=importlib -p no:cacheprovider --rootdir tests
 
@@ -14,6 +14,15 @@ project-build:
 project-test:
 	$(PYTEST) tests
 	node --import ./tests/desktop/register.mjs --test tests/desktop/*.test.mjs
+	node --test .github/scripts/*.test.cjs
+
+# The size report (docs/size-report.md): deterministic counts of what the plugin sends, held equal
+# to perf/size-report.json and under the ceilings in perf/BUDGETS.md. Part of `make test` too.
+size-check: ## Measure what the plugin sends against perf/size-report.json and its ceilings
+	$(PYTEST) tests/test_size_report.py
+
+size-report: ## Rewrite perf/size-report.json from a fresh measurement; review the diff
+	SIZE_REPORT=overwrite $(PYTEST) tests/test_size_report.py
 
 project-lint:
 	@uv run --python 3.12 --no-project python -m compileall -q __init__.py annotary_hermes dashboard scripts/project tests
