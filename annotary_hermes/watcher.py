@@ -260,9 +260,15 @@ class Watcher:
         return {"key": key, "host": host if key else docs.GATEWAY, "pid": pick.get("pid") if key else None}
 
     def _live_desktops(self, st: dict) -> set[int]:
+        """Pids of the Desktop backends running a watcher for THIS profile: a backend can run one
+        profile's watcher and not another's (beats are `<profile>:<pid>`)."""
         now = time.time()
-        return {int(pid) for pid, at in st["desktop_watchers"].items()
-                if now - at < DESKTOP_BEAT and _alive(int(pid))}
+        live = set()
+        for k, at in st["desktop_watchers"].items():
+            profile, _, pid = k.rpartition(":")
+            if profile == self.profile and pid.isdigit() and now - at < DESKTOP_BEAT and _alive(int(pid)):
+                live.add(int(pid))
+        return live
 
     def _owns(self, route: dict, st: dict) -> bool:
         """Whether this copy delivers *route*. A gateway session: the gateway's. A Desktop backend's:
@@ -302,10 +308,14 @@ class Watcher:
         if self.host != docs.DESKTOP:
             return
         def work(st: dict) -> None:
-            beats = st["desktop_watchers"]
-            beats[str(os.getpid())] = time.time()
-            for pid in [p for p, at in beats.items() if time.time() - at >= DESKTOP_BEAT or not _alive(int(p))]:
-                del beats[pid]
+            beats, now = st["desktop_watchers"], time.time()
+            beats[f"{self.profile}:{os.getpid()}"] = now
+
+            def stale(k: str) -> bool:
+                pid = k.rpartition(":")[2]
+                return not k.rpartition(":")[0] or not pid.isdigit() or now - beats[k] >= DESKTOP_BEAT or not _alive(int(pid))
+            for k in [k for k in beats if stale(k)]:
+                del beats[k]
         state.update(work, self.root)
 
     def deliver(self, w: rules.Wake) -> dict | None:
