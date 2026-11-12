@@ -55,6 +55,12 @@ Git takes no ref, and `--ref` takes a full SHA only. Then three things are still
   mounted, so a new route stays missing until the dashboard restarts. On Hermes Cloud the dashboard runs under s6:
   `s6-svc -r /run/service/dashboard` from the instance's terminal (`hermes dashboard` has no restart).
 
+A wake-up on a hosted Hermes needs its own check from a Desktop chat: the dashboard hosts those chats (session keys
+like `20261111_212221_fc90ed`, `host: desktop` in `state.json`) and the dashboard's watcher wakes them, which
+`make live-loop`'s terminal session never exercises. `outcome: "woke"` in `hermes annotary status` only means Hermes
+took the message; the turn ran only if the chat shows it, and a gateway log line `Plugin message injection was not
+routed` marks a miss.
+
 Hermes Desktop on a Mac connected to the instance showed the page from that Mac's own Hermes install
 (`~/.hermes/desktop-plugins/annotary/`, refreshed on View → Reload), not the instance's copy, so check the page in the
 Webapp, or update that Mac's plugin too. To see the page as a new browser does, remove
