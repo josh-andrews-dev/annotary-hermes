@@ -367,3 +367,11 @@ The same three guards as annotary's, so one rule reads the same in every Annotar
 - **One private reach stays: `getattr(ctx, "_manager", None)` in `_host_ready`,** guarded so a
   Hermes without it reads as always ready; Hermes's own `private_attribute_findings` does not flag
   it, and `test_no_internal_hermes_module_or_private_context_member_is_used` allows only this one.
+
+## 2026-11-13: `private-check-fork` is a required check
+
+- **Both private checks are required.** Chose `private-check-fork` as a required check beside
+  `private-check`; rejected leaving it optional (the 2026-11-09 choice) because on a fork's pull
+  request `private-check` gets no secret and skips, and GitHub counts a skipped required check as
+  a pass, so `private-check-fork` is the only real scan of a fork's diff. On the repo's own pull
+  requests it skips, so it costs nothing.
