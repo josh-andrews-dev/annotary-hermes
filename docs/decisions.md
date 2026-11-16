@@ -375,3 +375,12 @@ The same three guards as annotary's, so one rule reads the same in every Annotar
   request `private-check` gets no secret and skips, and GitHub counts a skipped required check as
   a pass, so `private-check-fork` is the only real scan of a fork's diff. On the repo's own pull
   requests it skips, so it costs nothing.
+
+## 2026-11-15: the surfaces check comes from the repo standard
+
+- **The five surfaces are recorded in `.agents/standard.yml`.** Chose the names the repo's own
+  check used (Web, Hermes page, App, CLI, Agents), with signs `dashboard/` for Web, `desktop/` for
+  the Hermes page and `skills/` for Agents, so open pull requests' `## Surfaces` lines still pass;
+  rejected new names because every body written to the old check would fail. The template's
+  `.github/workflows/surfaces.yml` (`scripts/standard/surfaces.py pr`) replaces the repo's own
+  script and its test; the job name stays `surfaces`, so the ruleset is unchanged.

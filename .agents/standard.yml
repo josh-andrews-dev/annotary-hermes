@@ -3,15 +3,30 @@
 # the starter files the repo deleted on purpose; always_loaded_budget and always_loaded_extra are
 # the always-loaded ratchet and extra files (scripts/standard/always_loaded.py). Set them with
 # `copier update -d` (copier.yml).
-_commit: v0.17.1
+_commit: v0.18.1
 _src_path: gh:josh-andrews-dev/repo-standard
 always_loaded_budget: 7980
 always_loaded_extra: []
 description: 'Annotary for Hermes Agent: review your agents'' plans and documents with comments, from Desktop, the Webapp and your phone'
 kinds: []
+not_surfaces: []
 owner: Personal
 project_name: annotary-hermes
 removed_starter_files: []
+surfaces:
+-   name: Web
+    signs:
+    - dashboard/
+-   name: Hermes page
+    signs:
+    - desktop/
+-   name: App
+    signs: []
+-   name: CLI
+    signs: []
+-   name: Agents
+    signs:
+    - skills/
 tier: lighter
 tracker: github
 visibility: public
