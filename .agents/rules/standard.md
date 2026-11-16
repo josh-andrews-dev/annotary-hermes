@@ -22,6 +22,8 @@ A pull request merges when:
 - the pull request body has a `## Lessons` section with what the change taught that the repo
   should keep, or `None`; the required `lessons` check fails until it does, and editing the body
   runs it again;
+- a `feat`, `fix` or `perf` pull request's `## Surfaces` section has a line for each surface; the
+  required `surfaces` check fails until it does;
 
 A change touching only docs or agent instructions, made after your last local checks passed, may
 rely on the `ci` check's lint instead of running `make lint` again.
