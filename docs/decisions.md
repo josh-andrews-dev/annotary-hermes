@@ -269,8 +269,10 @@ is in the maintainer's private plan.
   page (`/mentions`) and Delete and Restore (v0.6.1 and v0.6.2 are highlight fixes). The embed
   contract is unchanged: no new message, forwarded header or part size, the header still holds
   one row from 850 px, and an embed render has no Delete or Restore, so `bridge.py`,
-  `FRAME_ACTIONS_MIN_WIDTH` and `PART_MAX` stay. The Mentions page reaches the frame through the
-  bridge like any page, and `applyNav` leaves the selection as it is there. Each tarball was
+  `FRAME_ACTIONS_MIN_WIDTH` and `PART_MAX` stay. The Mentions page is not reached in the frame:
+  annotary links it only from the list's top bar, which the Hermes page replaces with its own
+  Document list. The Document page grows by about 25 KB (`perf/size-report.json`), still under
+  its ceiling. Each tarball was
   checked against the release's `sha256.sum` and with `gh attestation verify` (annotary's
   `release.yml` at `refs/tags/v0.7.0`).
 - **Copy link in the frame follows in annotary (annotary#79).** With no public URL the private

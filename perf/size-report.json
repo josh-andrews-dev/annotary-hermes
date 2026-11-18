@@ -83,7 +83,7 @@
       "id": "open.page.bytes",
       "label": "Open a Document: page through /proxy",
       "unit": "bytes",
-      "value": 859958,
+      "value": 885566,
       "ceiling": null
     },
     {
@@ -118,7 +118,7 @@
       "id": "open.bytes",
       "label": "Open a Document: bytes",
       "unit": "bytes",
-      "value": 1032345,
+      "value": 1057953,
       "ceiling": 1200000
     },
     {
