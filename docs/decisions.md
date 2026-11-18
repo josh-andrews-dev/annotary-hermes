@@ -263,6 +263,22 @@ is in the maintainer's private plan.
   wake a Bot, and a mention wake says not to resolve the asker's Thread; rejected a lower cap,
   which would still spend the person's turns on chatter.
 
+## 2026-11-17: Annotary v0.7.0
+
+- **Pinned Annotary v0.7.0.** It brings the web's Copy link, whole-Document comments, a Mentions
+  page (`/mentions`) and Delete and Restore (v0.6.1 and v0.6.2 are highlight fixes). The embed
+  contract is unchanged: no new message, forwarded header or part size, the header still holds
+  one row from 850 px, and an embed render has no Delete or Restore, so `bridge.py`,
+  `FRAME_ACTIONS_MIN_WIDTH` and `PART_MAX` stay. The Mentions page reaches the frame through the
+  bridge like any page, and `applyNav` leaves the selection as it is there. Each tarball was
+  checked against the release's `sha256.sum` and with `gh attestation verify` (annotary's
+  `release.yml` at `refs/tags/v0.7.0`).
+- **Copy link in the frame follows in annotary (annotary#79).** With no public URL the private
+  server builds the link from its own loopback origin, so the copied link opens nothing for the
+  person it is sent to. Chose to pin now and leave the fix to annotary, where the link is built;
+  rejected rewriting `#cd-data` in `bridge.py`, because a page split into parts can cut the field
+  and a rewrite of the server's HTML would be a second link builder that drifts.
+
 ## 2026-11-12: Annotary v0.6.0
 
 - **Pinned Annotary v0.6.0.** Its one change is a new read route, `GET /api/v1/docs/{id}/diff`
