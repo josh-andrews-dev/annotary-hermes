@@ -39,7 +39,10 @@ format is below; the `surfaces` check reads it).
   SHA-256), the embed contract (protocol, the headers `bridge.py` forwards, `PART_MAX`, the
   `annotary-*` messages), and `FRAME_ACTIONS_MIN_WIDTH` in `desktop/plugin.js`, which must match the
   width annotary's embedded page folds its Action buttons at. Read annotary's release notes for
-  each.
+  each, and for a new web feature, fetch an embed render (`X-Annotary-Embed: 1`) from the new
+  binary on loopback: a feature can be right on the web and wrong in the frame (annotary#79).
+  A new page set changes what the frame carries: run `make size-report` and commit
+  `perf/size-report.json`, with a `Size growth:` line when a number grew.
 
 ## The rule
 
