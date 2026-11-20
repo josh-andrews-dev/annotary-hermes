@@ -59,24 +59,63 @@ def set_editor_for_handle(doc: str, handle: str, root: Path | None = None) -> di
 
 
 def read_threads(token: str, doc_id: str, *, open_only: bool = True) -> list[dict]:
-    """A Document's Threads with every reply's body (``thread list`` has only the root's)."""
+    """A Document's Threads with every reply's body (``thread list`` has only the root's).
+
+    A Comment holding a drawing carries ``markup: true`` (``annotary_markup`` shows it). A Thread
+    about a Question carries its key (``add_answers`` adds its Answers); a Thread that asks one
+    also carries its options."""
     raw = server.api(token, "GET", f"/api/v1/docs/{doc_id}/threads?status={'open' if open_only else 'all'}")
     who = server.person_handle
+
+    def drawn(c: dict) -> dict:
+        return {"markup": True} if c.get("markup") else {}
+
     out = []
     for t in raw.get("threads") or []:
         if t.get("deleted"):
             continue
         anchor = t.get("anchor") or {}
         cur, orig = anchor.get("current") or {}, anchor.get("original") or {}
+        key = t.get("question") or (t.get("id") if t.get("options") else None)
+        asks = {"question": key} if key else {}
+        if t.get("options"):
+            asks["options"] = {o.get("id"): o.get("label") for o in t["options"]}
         out.append({
-            "id": t.get("id"), "author": who(t.get("author")), "body": t.get("body"),
+            "id": t.get("id"), "author": who(t.get("author")), "body": t.get("body"), **drawn(t), **asks,
             "where": (f"v{cur.get('version')}:{cur.get('range')} ({cur.get('status')}) \"{orig.get('exact', '')}\""
                       if cur.get("range") else t.get("subject") or "document"),
             "resolved": bool(t.get("resolved")),
-            "replies": [{"id": r.get("id"), "author": who(r.get("author")), "body": r.get("body")}
+            "replies": [{"id": r.get("id"), "author": who(r.get("author")), "body": r.get("body"), **drawn(r)}
                         for r in t.get("replies") or [] if not r.get("deleted")],
         })
     return out
+
+
+#: What ``questions_line`` gives: `-` unanswered, `*` changed since answered, `B@rowan,A@sam` two Members.
+QUESTIONS_LEGEND = "(- unanswered, * changed since it was answered, decided: written into the Document)"
+
+
+def questions_line(token: str, doc: str, root: Path | None = None) -> str:
+    """The Document's Questions and Answers as ``show`` prints them (``D4=B D5=- t9=A``), or ""."""
+    r = server.run_cli(token, ["show", doc], root=root)
+    if r.returncode != 0:
+        return ""
+    lines = r.stdout.splitlines()  # the header, then the questions line only when there are Questions
+    if len(lines) > 1 and lines[1].startswith("questions: "):
+        return lines[1][len("questions: "):].strip()
+    return ""
+
+
+def parse_answers(line: str) -> dict[str, str]:
+    """``D4=B D5=-`` as {key: what was answered}."""
+    return dict(w.split("=", 1) for w in line.split() if "=" in w)
+
+
+def add_answers(rows: list[dict], answers: dict[str, str]) -> None:
+    """Each Question Thread's Answers, from ``parse_answers``."""
+    for t in rows:
+        if t.get("question") in answers:
+            t["answer"] = answers[t["question"]]
 
 
 def note_session(profile: str, session_key: str, surface: str, host: str = GATEWAY,

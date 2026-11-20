@@ -12,7 +12,6 @@ copy claims it there (see `Watcher._owns`), however the session's host changes a
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import re
@@ -153,13 +152,17 @@ MENTION = re.compile(r"(?<![\w@])@([A-Za-z0-9][A-Za-z0-9_-]*)")
 def _thread_digest(tok: str, doc: str, root: Path | None, me: str = "") -> str:
     """Every open Thread with its replies, as the woken agent's reading list. A Thread with no
     reply from *me* is marked: it is waiting for an answer, unless it @mentions other Bots and not
-    *me* (it is theirs to answer)."""
+    *me* (it is theirs to answer). The Document's Questions and their Answers lead it, and a
+    Thread that holds a drawing or a Question says so."""
     try:
         rows = docs.read_threads(tok, doc, open_only=True)
     except server.ServerError:
         rows = []
+    line = docs.questions_line(tok, doc, root)
+    docs.add_answers(rows, docs.parse_answers(line))
+    head = f"{QUESTIONS_HEAD}{line} {docs.QUESTIONS_LEGEND}\n" if line else ""
     if not rows:
-        return "No open Threads."
+        return head + "No open Threads."
     bots = {m.get("handle") for m in state.load(root)["members"].values()}
     lines = []
     for t in rows[:40]:
@@ -168,11 +171,19 @@ def _thread_digest(tok: str, doc: str, root: Path | None, me: str = "") -> str:
         if me and not any(r["author"] == me for r in t["replies"]):
             waiting = (f" (for {', '.join('@' + h for h in sorted(asked))} to answer)" if asked and me not in asked
                        else " (waiting for your answer)")
-        lines.append(f"- {t['id']} @{t['author']} on {t['where']}{waiting}: "
+        tags = (MARKUP_TAG if t.get("markup") or any(r.get("markup") for r in t["replies"]) else "") + (
+            f" [Question {t['question']}: {t.get('answer', '-')}]" if t.get("question") else "")
+        lines.append(f"- {t['id']} @{t['author']} on {t['where']}{tags}{waiting}: "
                      f"{' '.join(str(t['body'] or '').split())[:600]}")
         for r in t["replies"][-10:]:
-            lines.append(f"    - {r['id']} @{r['author']}: {' '.join(str(r['body'] or '').split())[:600]}")
-    return "Open Threads:\n" + "\n".join(lines)
+            lines.append(f"    - {r['id']} @{r['author']}{MARKUP_TAG if r.get('markup') else ''}: "
+                         f"{' '.join(str(r['body'] or '').split())[:600]}")
+    return head + "Open Threads:\n" + "\n".join(lines)
+
+
+#: How the digest marks what it carries; message_for keys its extra advice on them.
+QUESTIONS_HEAD = "Questions and answers: "
+MARKUP_TAG = " [drawing: see it with annotary_markup]"
 
 
 #: How to answer a Thread, the same in the skill, the tool descriptions and every wake-up.
@@ -189,10 +200,16 @@ def message_for(w: rules.Wake, *, me: str, digest: str) -> str:
         if w.action == "send-back":
             todo = (f"The review is over. Fix what the Threads ask, push one new Version with "
                     f"annotary_push_version (doc={w.doc}), then {ANSWER}.")
+            if QUESTIONS_HEAD in digest:
+                todo += (" Start from annotary_read's text: it has the person's answers in the Decided cells, "
+                         "and a push that drops one is refused. Follow what they decided.")
         else:
             todo = ("The Document is approved. Do not push. Answer every open Thread that is waiting for "
                     "you (a question gets an answer, an unclear comment a question back), then tell the "
                     "person what happens next.")
+            if QUESTIONS_HEAD in digest:
+                todo += (" Record their answers: annotary_read gives the text with them in the Decided cells; "
+                         "save that in your copy of the file and act on what they decided.")
         return f"[Annotary] @{w.by} chose {label} on {title}.\n{digest}\n{todo}"
     return (f"[Annotary] @{w.by} mentioned you (@{me}) in Thread {w.thread} on {title}: \"{w.excerpt}\"\n"
             f"Read it with annotary_threads and answer in that Thread with annotary_reply: the answer, or a "

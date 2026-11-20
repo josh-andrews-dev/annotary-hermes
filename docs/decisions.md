@@ -263,6 +263,25 @@ is in the maintainer's private plan.
   wake a Bot, and a mention wake says not to resolve the asker's Thread; rejected a lower cap,
   which would still spend the person's turns on chatter.
 
+## 2026-11-20: Annotary v0.8.0
+
+- **Pinned Annotary v0.8.0.** It brings Markups (a drawing made in the iPhone and iPad app, kept
+  on a Comment as a PNG and its strokes) and Questions (a decisions table in the Markdown, or a
+  Question asked on a Thread, answered with a tap). v0.7.1 (the skill asks the person instead of
+  waiting on a review handoff) and v0.7.2 (a release-tooling fix) change nothing the plugin uses.
+  The embed contract is unchanged: no new `annotary-*` message (`embed.js` is untouched), no new
+  forwarded header (`embed.rs`'s headers, `PART_MAX` 384 KiB and `IMAGE_MAX` 700 KiB are as in
+  v0.7.0), and the header still folds at 850 px, so `bridge.py`'s `FORWARD`, `PART_MAX` and
+  `FRAME_ACTIONS_MIN_WIDTH` stay. The frame fetches a Markup image like an avatar (`data-cd-mk`,
+  a binary GET through `/proxy`) and answers with a `PUT …/questions/{key}/answer` with a JSON
+  body, both of which the bridge already carries. A loopback embed render of the v0.8.0 binary,
+  driven in Chromium at 1,200 and 700 px with the plugin's own `bridge.request` as the frame's
+  backend: a table Question answered, **Accept recommended** (in the header at 1,200 px, in the
+  header's overlay at 700 px, as on the web), a mid-review Question answered from its card, and
+  the Markup image loaded in its card. The Document page grows by about 2 KB
+  (`perf/size-report.json`). Each tarball was checked against the release's `sha256.sum` and with
+  `gh attestation verify` (annotary's `release.yml` at `refs/tags/v0.8.0`).
+
 ## 2026-11-17: Annotary v0.7.0
 
 - **Pinned Annotary v0.7.0.** It brings the web's Copy link, whole-Document comments, a Mentions
@@ -402,3 +421,72 @@ The same three guards as annotary's, so one rule reads the same in every Annotar
   rejected new names because every body written to the old check would fail. The template's
   `.github/workflows/surfaces.yml` (`scripts/standard/surfaces.py pr`) replaces the repo's own
   script and its test; the job name stays `surfaces`, so the ruleset is unchanged.
+
+## 2026-11-20: Markups and Questions for agents
+
+- **`annotary_markup` returns Hermes's multimodal tool result.** Chose the envelope
+  `{"_multimodal": true, "content": [text, image_url…], "text_summary"}` that Hermes's public
+  `tools/registry.py` (`_normalize_handler_result`) accepts from any handler, and that its agent
+  turns into `text_summary` for a model or provider that cannot take an image in a tool result;
+  rejected calling Hermes's own vision gate (`vision_tools._native_tool_result_images`), which is
+  Hermes internals. The plugin's handler JSON-encodes every other result as before. The
+  `text_summary` names each saved PNG and the Thread's quoted source text, so such a model can open
+  the file with `vision_analyze`. At most four images go in one result; every path is named.
+- **An image is inlined only up to 1 MiB, and one result to 2 MiB of PNG.** Hermes re-sends a
+  tool result's images on every later turn and does not shrink a plugin's: its own vision tools
+  embed at most `vision.embed_target_bytes` (256 KB by default, 4 MiB at most) and drop a data URL
+  over 20 MB; Anthropic refuses an image over 5 MB. Base64 grows a file by 4/3, so the caps put at
+  most about 2.7 MiB in the context, while a normal drawing (a crop of at most 1,568 px on its long
+  edge, a few hundred KiB) is still shown. A file over a cap is checked by its size before it is
+  read, gets no image, and its line says to open the saved path with `vision_analyze`. Rejected
+  the server's own 2 MiB per image, which lets one result put about 10.7 MiB of base64 in the
+  context, and resizing here, which needs an image library the plugin does not ship.
+- **The Markup folder is pruned after the images are read, never of this call's files**, and only
+  its `<document id>/t3.png` or `t3.1.png` files: a symlink, a deeper folder or another file name
+  is left alone. A drawing path the CLI returns must be a regular file directly in that
+  Document's folder, and the Document id must look like one, or the tool refuses.
+- **The images are saved under the profile's own plugin folder**
+  (`<profile home>/plugin-data/annotary/markup/<document>/`), written by the CLI's
+  `thread show --markup DIR`, kept to the newest 40 and none older than 7 days; rejected a
+  temporary folder because `vision_analyze` may open the file in a later turn, and `~/.annotary`
+  because the plugin never touches it. The README discloses it.
+- **No new tool for the decisions table.** `annotary_read` returns the text `pull` hands back
+  (the head's Answers written into the `Decided` cells) and says how many it filled;
+  `annotary_comment` anchors on the Version's own bytes (`pull --as-pushed`), since a filled cell
+  shifts that row's columns. A push the CLI refuses with `answers_missing` comes back as
+  `{refused, reason, rows}`; the plugin never passes `--discard-answers`. Rejected a tool that
+  writes the answers in for the agent, which would be a second `pull`.
+- **A mid-review Question is `options` on `annotary_comment`** (`thread new … --ask`), 2 to 6
+  distinct labels of at most 80 characters; rejected an `annotary_ask` tool because two new tools
+  do not fit the tool schemas' ceiling (5,728 of 5,800 bytes with one).
+- **The `questions:` line comes from the CLI.** `annotary_threads` and the wake-up digest take it
+  from `show DOC` (`D4=B D5=- t9=A*`), and each Question Thread's `answer` from that line; rejected
+  formatting it from the JSON here, which would drift from annotary's `show`. Only the line
+  after the header is read, where `show` prints it, so a Document named `questions: …` is not
+  taken for one.
+- **A quote that includes a filled `Decided` cell is refused with what to quote instead.** Such a
+  quote is in `annotary_read`'s text but not in the pushed bytes a comment anchors on; the plugin
+  reads the filled text only after the quote misses, so a normal comment costs no extra `pull`.
+- **An Answer wakes nobody (D5 as written).** `question.answered` is not a comment, so
+  `rules.decide` ignores it and it neither opens a review nor blocks a push; a Markup is a
+  `thread.created` / `thread.replied` with `markup: true`, a plain comment. Send back and Approve
+  wake as before, and their message carries the Questions line, with what to do about the answers
+  (start the push from `annotary_read`'s text; after Approve, save that text and do not push).
+- **The cards show Questions read-only.** The chat card's line gains "2 of 5 answered" and keeps
+  its one Open button; the native fallback view lists each Question with its options and Answers
+  and shows a Comment's Markup image (fetched through `/proxy`, as the frame does). Answering is
+  the embedded page's; `/doc` carries `questions` only when the Document has one, so its answer
+  is unchanged otherwise.
+- **A decisions table row Annotary skips is handed back to the model.** `annotary_share` and
+  `annotary_push_version` pass on the `decisions table …` entries of `push --json`'s `warnings[]`
+  as `table_warnings`, with `table_fix` (keys-only cells and an example row), and the skill shows
+  one correct row. A live run's agent wrote the option wording into the cells, every row was
+  skipped and the share still read as a success. Rejected `--strict`, which refuses the whole push
+  over any warning, assets included.
+- **A refused Token is found by asking the server, not by the file being there.** `doctor` calls
+  `GET /api/v1/me` with each profile's Token and fails naming the profiles it refuses (401, or
+  another Member's handle); `setup` and `members` run the reconcile with `check_tokens`, which
+  mints a new Token for each of them. Chose to leave the check out of the background reconcile a
+  tool call triggers, which would cost a request per profile on every pass; `doctor` itself reports
+  and does not repair, so its FAIL names the fix (`hermes annotary setup`).
+

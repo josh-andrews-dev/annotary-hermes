@@ -429,7 +429,7 @@ def test_the_skill_is_registered_with_its_description():
     spec.loader.exec_module(plugin)
     ctx = FakeCtx()
     plugin.register(ctx)
-    assert len(ctx.tools) == 10
+    assert len(ctx.tools) == 11
     import yaml
     assert ctx.tools == yaml.safe_load((ROOT / "plugin.yaml").read_text())["provides_tools"]
     (skill,) = ctx.skills

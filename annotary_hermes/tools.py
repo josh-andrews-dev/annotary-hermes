@@ -6,12 +6,14 @@ Assets and Sidecars behave as in Annotary. Every result is a JSON-ready dict.
 
 from __future__ import annotations
 
+import base64
 import functools
 import json
 import logging
 import re
 import secrets
 import shutil
+import stat
 import tempfile
 import time
 import urllib.parse
@@ -24,6 +26,23 @@ log = logging.getLogger("annotary_hermes")
 CARD = '::annotary{{doc="{doc}"}}'
 DOC_RE = re.compile(r"^[A-Za-z0-9._/~ -]{1,200}$")
 READ_MAX_CHARS = 200_000  # what one tool result may hand the model
+#: Labels of a Question asked with annotary_comment (annotary's `thread new --ask`: 2 to 6).
+ASK_MIN, ASK_MAX, ASK_LABEL_MAX = 2, 6, 80
+#: Drawings saved for annotary_markup: the newest MARKUP_KEEP files, none older than MARKUP_TTL.
+MARKUP_KEEP, MARKUP_TTL = 40, 7 * 86400
+#: Images one annotary_markup result hands the model; every saved path is still named.
+MARKUP_IMAGES_MAX = 4
+#: Bytes of PNG one result inlines, per image and in all (docs/decisions.md); a larger one is named only.
+MARKUP_IMAGE_BYTES, MARKUP_TOTAL_BYTES = 1 << 20, 2 << 20
+MARKUP_NAME_RE = re.compile(r"t\d+(?:\.\d+)?\.png")
+DOC_ID_RE = re.compile(r"[a-z0-9]{1,16}")
+FILLED_RE = re.compile(r"^(\d+) answers? written into the decisions table", re.M)
+#: How annotary (v0.8.0) starts each warning about the decisions table, a second one included.
+TABLE_WARNING = ("decisions table", "a second decisions table")
+TABLE_FIX = ("Annotary skipped or questioned these decisions table rows, so the person cannot answer them. "
+             "Each cell holds keys only: Decision a bare key (D1), Options the option ids (A, B), e.g. "
+             "`| D1 | A, B | |`; put the wording in the text (`D1. Where it runs`, `A. The existing box`). "
+             "Fix the table and push it again with annotary_push_version.")
 
 
 @dataclass
@@ -68,6 +87,12 @@ def _cli_json(tok: str, args: list[str], root: Path | None, **kw):
         return [json.loads(line) for line in out.splitlines() if line.strip()]
 
 
+def _table_warnings(pushed: dict) -> dict:
+    """The push's warnings about its decisions table (`push --json` `warnings[]`), for the model to fix."""
+    warns = [w for w in pushed.get("warnings") or [] if isinstance(w, str) and w.startswith(TABLE_WARNING)]
+    return {"table_warnings": warns, "table_fix": TABLE_FIX} if warns else {}
+
+
 def _check_doc(doc: str) -> str:
     doc = (doc or "").strip()
     if not doc or not DOC_RE.match(doc) or doc.startswith("-"):
@@ -89,7 +114,11 @@ def _with_pending(fn):
     def run(c: Caller, *args, root: Path | None = None, **kwargs):
         out = fn(c, *args, root=root, **kwargs)
         pend = _pending(c, root)
-        if pend and isinstance(out, dict):
+        if pend and isinstance(out, dict) and out.get("_multimodal") is True:  # Hermes reads only its parts
+            note = "missed_wakeups: " + json.dumps(pend, default=str)
+            out["content"].append({"type": "text", "text": note})
+            out["text_summary"] += "\n" + note
+        elif pend and isinstance(out, dict):
             out["missed_wakeups"] = pend
         return out
     return run
@@ -255,9 +284,13 @@ def share(c: Caller, *, path: str = "", markdown: str = "", name: str = "", mess
         file = final / file.name
     docs.record_share(doc_id, name=pushed.get("name", ""), profile=c.profile, session_key=c.session_key,
                       surface=c.surface, path=str(file), host=c.host, root=root)
+    table = _table_warnings(pushed)
+    wait = "Wait for the person's review. Do not push again until they Send back or Approve."
     out = {"id": doc_id, "name": pushed.get("name"), "version": pushed.get("version"),
-           "editor": f"@{accounts.handle_of(c.profile, root)}", **_present(c, doc_id),
-           "next": "Wait for the person's review. Do not push again until they Send back or Approve."}
+           "editor": f"@{accounts.handle_of(c.profile, root)}", **_present(c, doc_id), **table,
+           "next": ("First fix the decisions table and push it once with annotary_push_version (table_fix). "
+                    "Then wait for the person's review: no other push until they Send back or Approve.")
+           if table else wait}
     try:
         steps = _setup_steps(c, root)
     except Exception as e:  # noqa: BLE001 — the share happened; a retry would make a duplicate Document
@@ -274,21 +307,33 @@ def share(c: Caller, *, path: str = "", markdown: str = "", name: str = "", mess
 def threads(c: Caller, *, doc: str, open_only: bool = True, root: Path | None = None) -> dict:
     tok = _prepare(c, root)
     head = docs.resolve_id(_check_doc(doc), tok, root)
+    has_table = bool(head.pop("questions", None))  # the line below says it shorter
     rows = docs.read_threads(tok, head["id"], open_only=open_only)
+    line = docs.questions_line(tok, head["id"], root) if has_table or any("question" in t for t in rows) else ""
+    docs.add_answers(rows, docs.parse_answers(line))
     entry = docs.info(head["id"], root) or {}
     editor = entry.get("editor")
-    return {"doc": head, "editor": f"@{accounts.handle_of(editor, root)}" if editor else None,
-            "you_are_editor": editor == c.profile, "threads": rows}
+    out = {"doc": head, "editor": f"@{accounts.handle_of(editor, root)}" if editor else None,
+           "you_are_editor": editor == c.profile, "threads": rows}
+    if line:
+        out["questions"] = f"{line} {docs.QUESTIONS_LEGEND}"
+    if any(t.get("markup") or any(r.get("markup") for r in t["replies"]) for t in rows):
+        out["markup"] = "A Thread or reply with markup: true holds a drawing: see it with annotary_markup."
+    return out
 
 
-def _head_text(tok: str, doc: str, root: Path | None) -> tuple[dict, str]:
-    """The head Version's header and its Markdown source, byte for byte."""
+def _head_text(tok: str, doc: str, root: Path | None, *, as_pushed: bool = True) -> tuple[dict, str, int]:
+    """The head Version's header, its Markdown and how many Answers `pull` wrote into its
+    decisions table: none *as_pushed* (the Version's bytes, which anchors count in), else the
+    text `pull` hands back, the head's Answers in the `Decided` cells."""
     head = docs.resolve_id(doc, tok, root)
     with tempfile.TemporaryDirectory() as out:
-        r = server.run_cli(tok, ["pull", head["id"], "--version", str(head["version"]), "--out", out], root=root)
+        r = server.run_cli(tok, ["pull", head["id"], "--version", str(head["version"]), "--out", out,
+                                 *(["--as-pushed"] if as_pushed else [])], root=root)
         if r.returncode != 0:
             raise ToolError(r.stderr.strip()[-600:] or f"could not read {doc}")
-        return head, next(Path(out).glob("*.md")).read_bytes().decode("utf-8")
+        filled = FILLED_RE.search(r.stderr or "")
+        return head, next(Path(out).glob("*.md")).read_bytes().decode("utf-8"), int(filled.group(1)) if filled else 0
 
 
 def _quoted_passage(text: str, quote: str) -> str:
@@ -323,16 +368,23 @@ def _find_quote(text: str, quote: str) -> tuple[str, str]:
 @_with_pending
 def read(c: Caller, *, doc: str, root: Path | None = None) -> dict:
     tok = _prepare(c, root)
-    head, text = _head_text(tok, _check_doc(doc), root)
+    head, text, filled = _head_text(tok, _check_doc(doc), root, as_pushed=False)
     editor = (docs.info(head["id"], root) or {}).get("editor")
-    return {"doc": head["id"], "name": head.get("name"), "version": head["version"],
-            "editor": f"@{accounts.handle_of(editor, root)}" if editor else None,
-            "you_are_editor": editor == c.profile, "text": text[:READ_MAX_CHARS],
-            **({"truncated": True} if len(text) > READ_MAX_CHARS else {})}
+    out = {"doc": head["id"], "name": head.get("name"), "version": head["version"],
+           "editor": f"@{accounts.handle_of(editor, root)}" if editor else None,
+           "you_are_editor": editor == c.profile, "text": text[:READ_MAX_CHARS],
+           **({"truncated": True} if len(text) > READ_MAX_CHARS else {})}
+    if filled:
+        out["answers_filled"] = filled
+        out["answers_note"] = (f"{filled} answer(s) the person gave in Annotary are written into the Decided cells "
+                               "of this text. Keep them when you push (start from this text): a push that drops "
+                               "one is refused.")
+    return out
 
 
 @_with_pending
-def comment(c: Caller, *, doc: str, quote: str, body: str, version: int = 0, root: Path | None = None) -> dict:
+def comment(c: Caller, *, doc: str, quote: str, body: str, version: int = 0, options: list | None = None,
+            root: Path | None = None) -> dict:
     tok = _prepare(c, root)
     doc = _check_doc(doc)
     quote = quote or ""
@@ -340,7 +392,8 @@ def comment(c: Caller, *, doc: str, quote: str, body: str, version: int = 0, roo
         raise ToolError("quote is empty: give the exact passage this comment is about")
     if not (body or "").strip():
         raise ToolError("body is empty")
-    head, text = _head_text(tok, doc, root)
+    asks = _ask_labels(options)
+    head, text, _ = _head_text(tok, doc, root)
     doc_id, head_version = head["id"], head["version"]
 
     def refused(reason: str) -> dict:
@@ -349,16 +402,47 @@ def comment(c: Caller, *, doc: str, quote: str, body: str, version: int = 0, roo
     moved = "Read it again with annotary_read, then comment on what it says now."
     if version and int(version) != head_version:
         return refused(f"You read Version {version}, but this Document is now at Version {head_version}. {moved}")
-    anchor, why = _find_quote(text, _quoted_passage(text, quote))
+    passage = _quoted_passage(text, quote)
+    anchor, why = _find_quote(text, passage)
     if not anchor:
+        if passage not in text and _in_filled_text(tok, doc_id, quote, root):
+            why = ("That quote includes an Answer filled into a Decided cell, which is not in the pushed Version "
+                   "yet. Quote the Decision or Options cells, or the decision's prose, instead.")
         return refused(why)
-    r = server.run_cli(tok, ["thread", "new", doc_id, anchor, "-m", "-", "--version", str(head_version), "--json"],
-                       root=root, stdin=body)
+    ask = [a for label in asks for a in ("--ask", label)]
+    r = server.run_cli(tok, ["thread", "new", doc_id, anchor, "-m", "-", "--version", str(head_version), *ask,
+                             "--json"], root=root, stdin=body)
     if r.returncode == 5:  # the CLI's own refusal: head moved after the text above was read
         return refused(f"This Document changed while you were commenting. {moved}")
     if r.returncode != 0:
         raise ToolError(r.stderr.strip()[-600:] or f"annotary thread new failed ({r.returncode})")
-    return {**json.loads(r.stdout), "doc": doc_id, "version": head_version}
+    out = {**json.loads(r.stdout), "doc": doc_id, "version": head_version}
+    if asks:
+        out["asked"] = (f"A Question with {len(asks)} options: the person answers with a tap. An answer wakes "
+                        "nobody; annotary_threads shows it (question, answer).")
+    return out
+
+
+def _in_filled_text(tok: str, doc_id: str, quote: str, root: Path | None) -> bool:
+    """Whether *quote* is in the head as annotary_read shows it, the Answers in its Decided cells."""
+    _, filled_text, filled = _head_text(tok, doc_id, root, as_pushed=False)
+    return bool(filled) and _quoted_passage(filled_text, quote) in filled_text
+
+
+def _ask_labels(options) -> list[str]:
+    """annotary_comment's options: 2 to 6 short, distinct labels, or none."""
+    if not options:
+        return []
+    if not isinstance(options, list) or not all(isinstance(o, str) for o in options):
+        raise ToolError("options must be a list of short labels")
+    labels = [" ".join(o.split()) for o in options]
+    if not ASK_MIN <= len(labels) <= ASK_MAX:
+        raise ToolError(f"options takes {ASK_MIN} to {ASK_MAX} labels, not {len(labels)}")
+    if any(not lb or len(lb) > ASK_LABEL_MAX or lb.startswith("-") for lb in labels):
+        raise ToolError(f"each option is a short label (1 to {ASK_LABEL_MAX} characters, not starting with -)")
+    if len({lb.lower() for lb in labels}) != len(labels):
+        raise ToolError("the options must differ")
+    return labels
 
 
 @_with_pending
@@ -401,15 +485,41 @@ def push_version(c: Caller, *, doc: str, path: str = "", markdown: str = "", mes
         file = _write(known, markdown)
     else:
         file = _resolve_path(c, path)
-    pushed = _cli_json(tok, ["push", file.name, "--doc", doc_id, "-m", message or "update"],
-                       root, cwd=file.parent)
+    r = server.run_cli(tok, ["push", file.name, "--doc", doc_id, "-m", message or "update", "--json"],
+                       root=root, cwd=file.parent)
+    missing = _answers_missing(r)
+    if missing is not None:
+        return {"refused": True, "doc": doc_id, "rows": missing, "reason": (
+            "The person answered Questions in Annotary, and this content drops their answers from the decisions "
+            "table. Put each row of `rows` in (text is the row as it must read; row is its line), or start "
+            "from annotary_read's text, which has them, then push again.")}
+    if r.returncode != 0:
+        raise ToolError((r.stderr.strip() or r.stdout.strip())[-600:] or f"annotary push failed ({r.returncode})")
+    pushed = json.loads(r.stdout)
     if c.session_key:
         def work(st: dict) -> None:
             st["docs"].setdefault(doc_id, {}).update(session_key=c.session_key, **docs.where(c.host))
             st["docs"][doc_id]["path"] = str(file)
         state.update(work, root)
-    return {**pushed, **_present(c, doc_id),
+    table = _table_warnings(pushed)
+    rest = [w for w in pushed.pop("warnings", None) or [] if w not in table.get("table_warnings", ())]
+    return {**pushed, **({"warnings": rest} if rest else {}), **_present(c, doc_id), **table,
             "next": _answer_next(pushed.get("version"))}
+
+
+def _answers_missing(r) -> list[dict] | None:
+    """The rows a refused push must put back (annotary's 409 `answers_missing`), else None."""
+    if r.returncode != 5:
+        return None
+    for line in reversed((r.stderr or "").strip().splitlines()):
+        try:
+            err = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(err, dict) and err.get("error") == "answers_missing":
+            return [{k: m.get(k) for k in ("key", "row", "text")} for m in err.get("missing") or []]
+        return None
+    return None
 
 
 def _answer_next(version) -> str:
@@ -482,3 +592,103 @@ def set_name(c: Caller, *, name: str, root: Path | None = None) -> dict:
     elif not server.slug(out["name"]):
         said += " Their handle stays, because a handle is made from Latin letters and digits."
     return {**{k: out[k] for k in ("handle", "name")}, "said": said}
+
+
+def _entries(folder: Path) -> list[Path]:
+    try:
+        return list(folder.iterdir())
+    except (FileNotFoundError, NotADirectoryError):
+        return []
+
+
+def _markup_dirs(folder: Path) -> list[Path]:
+    """The Markup folder's doc-id folders: real directories only, never a symlink."""
+    return [d for d in _entries(folder) if DOC_ID_RE.fullmatch(d.name) and not d.is_symlink() and d.is_dir()]
+
+
+def _prune(folder: Path, now: float, keep: frozenset = frozenset()) -> None:
+    """Keep the Markup folder bounded: the newest MARKUP_KEEP drawings, none older than MARKUP_TTL.
+    *keep* (``(doc_id, name)`` pairs, this call's drawings) is never removed and counts first."""
+    found = []
+    for d in _markup_dirs(folder):
+        for p in _entries(d):
+            if not MARKUP_NAME_RE.fullmatch(p.name) or (d.name, p.name) in keep:
+                continue
+            try:
+                st = p.lstat()
+            except FileNotFoundError:
+                continue
+            if stat.S_ISREG(st.st_mode):
+                found.append((st.st_mtime, p))
+    found.sort(key=lambda f: f[0], reverse=True)
+    for i, (mtime, p) in enumerate(found, start=len(keep)):
+        if i >= MARKUP_KEEP or now - mtime > MARKUP_TTL:
+            p.unlink(missing_ok=True)
+    for d in _markup_dirs(folder):
+        try:
+            d.rmdir()
+        except OSError:  # not empty, or gone already
+            pass
+
+
+def _saved_drawing(out_dir: Path, path) -> Path:
+    """The file `thread show --markup` says it wrote: a regular file named like t3.png or t3.1.png
+    directly in *out_dir*, never a symlink."""
+    p = Path(str(path))
+    if (not MARKUP_NAME_RE.fullmatch(p.name) or p.is_symlink() or not p.is_file()
+            or p.resolve().parent != out_dir.resolve()):
+        raise ToolError(f"annotary gave an unexpected drawing path: {p.name}")
+    return p
+
+
+@_with_pending
+def markup(c: Caller, *, doc: str, thread: str, root: Path | None = None) -> dict:
+    """A Thread's drawings, as Hermes's multimodal tool result: the images, and the text they cover.
+
+    The images are saved under the profile's own plugin folder, so a model that cannot take images
+    in a tool result can still open them (``text_summary`` names each path)."""
+    tok = _prepare(c, root)
+    doc = _check_doc(doc)
+    if not re.fullmatch(r"t\d+", thread or ""):
+        raise ToolError("thread must be a Thread id like t3")
+    doc_id = str(docs.resolve_id(doc, tok, root)["id"])
+    if not DOC_ID_RE.fullmatch(doc_id):
+        raise ToolError(f"annotary gave an unexpected Document id: {doc_id[:40]!r}")
+    folder = paths.markup_dir(c.profile, root)
+    out_dir = folder / doc_id
+    if out_dir.is_symlink():
+        raise ToolError(f"{out_dir} is a symlink: remove it, then ask again")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    rows = _cli_json(tok, ["thread", "show", doc_id, thread, "--markup", str(out_dir)], root)
+    t = rows[0] if isinstance(rows, list) and rows else rows
+    comments = [t, *[r for r in t.get("replies") or [] if not r.get("deleted")]]
+    drawn = [(cm, _saved_drawing(out_dir, cm["markup"]["path"])) for cm in comments
+             if (cm.get("markup") or {}).get("path")]
+    if not drawn:
+        _prune(folder, time.time())
+        return {"doc": doc_id, "thread": thread, "markup": None, "note": f"{thread} holds no drawing."}
+    tried = [p for _, p in drawn[-MARKUP_IMAGES_MAX:]]
+    shown, budget = set(), MARKUP_TOTAL_BYTES
+    for p in tried:
+        size = p.lstat().st_size
+        if size <= min(MARKUP_IMAGE_BYTES, budget):
+            shown.add(p)
+            budget -= size
+    orig = ((t.get("anchor") or {}).get("original") or {})
+    where = f'the source text "{orig["exact"]}"' if orig.get("exact") else "the whole Document"
+    lines = [f"Drawings on {thread} of {doc_id}, over {where} (the drawing is on that text, as the person saw it):"]
+    images = []
+    for cm, p in drawn:
+        m = cm["markup"]
+        body = " ".join(str(cm.get("body") or "").split())
+        big = p in tried and p not in shown
+        lines.append(f"- {cm['id']} by @{server.person_handle(cm.get('author') or '')}: {m.get('width')}x{m.get('height')} "
+                     f"px image saved at {p}" + (f'; its note: "{body}"' if body else "")
+                     + ("; too large to show here: open it with vision_analyze" if big else ""))
+        if p in shown:
+            images.append({"type": "image_url", "image_url": {
+                "url": "data:image/png;base64," + base64.b64encode(p.read_bytes()).decode("ascii")}})
+    _prune(folder, time.time(), frozenset((doc_id, p.name) for _, p in drawn))
+    text = "\n".join(lines)
+    return {"_multimodal": True, "content": [{"type": "text", "text": text}, *images],
+            "text_summary": text + "\nIf you cannot see the image here, open each saved file with vision_analyze."}

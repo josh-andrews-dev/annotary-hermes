@@ -50,7 +50,9 @@ SCHEMAS = {
                                                         "long enough to match one place only")},
             "body": {"type": "string", "description": "The comment (Markdown)"},
             "version": {"type": "integer", "description": ("The Version you read, from annotary_read: "
-                                                           "the comment is refused if the Document has moved on")}},
+                                                           "the comment is refused if the Document has moved on")},
+            "options": {"type": "array", "items": {"type": "string"},
+                        "description": "2 to 6 short answers: asks a Question the person answers with a tap"}},
             "required": ["doc", "quote", "body"]}},
     "annotary_threads": {
         "description": ("Read a Document's review Threads (comments anchored to lines) with their replies, open "
@@ -68,6 +70,11 @@ SCHEMAS = {
             "doc": _DOC, "thread": {"type": "string", "description": "Thread id, e.g. t3"},
             "text": {"type": "string", "description": "Your reply (Markdown); name the Version a change is in (\"Done in v3: …\")"},
             "resolve": {"type": "boolean"}}, "required": ["doc", "thread", "text"]}},
+    "annotary_markup": {
+        "description": "See the drawing on a Thread or reply marked markup: true, with the text it covers.",
+        "parameters": {"type": "object", "properties": {
+            "doc": _DOC, "thread": {"type": "string", "description": "Thread id, e.g. t3"}},
+            "required": ["doc", "thread"]}},
     "annotary_push_version": {
         "description": (
             "Push a new Version of a Document you edit, after the person sent it back. Refused if you "
@@ -168,7 +175,10 @@ def register(ctx):
     def handler(fn, params_of):
         def run(args, **kwargs):
             try:
-                return json.dumps(fn(caller(kwargs), **params_of(args or {})), default=str)
+                out = fn(caller(kwargs), **params_of(args or {}))
+                if isinstance(out, dict) and out.get("_multimodal") is True:
+                    return out  # Hermes's multimodal tool result (tools/registry.py): images and a text_summary
+                return json.dumps(out, default=str)
             except tools.ToolError as e:
                 return json.dumps({"error": str(e)})
             except Exception as e:  # noqa: BLE001 — a tool returns its error, never raises
@@ -180,9 +190,10 @@ def register(ctx):
     table = {
         "annotary_share": (tools.share, pick("path", "markdown", "name", "message")),
         "annotary_read": (tools.read, pick("doc")),
-        "annotary_comment": (tools.comment, pick("doc", "quote", "body", "version")),
+        "annotary_comment": (tools.comment, pick("doc", "quote", "body", "version", "options")),
         "annotary_threads": (tools.threads, pick("doc", "open_only")),
         "annotary_reply": (tools.reply, pick("doc", "thread", "text", "resolve")),
+        "annotary_markup": (tools.markup, pick("doc", "thread")),
         "annotary_push_version": (tools.push_version, pick("doc", "path", "markdown", "message", "review_over")),
         "annotary_handoff": (tools.handoff, pick("doc", "to")),
         "annotary_act": (tools.act, pick("doc", "action")),

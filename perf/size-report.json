@@ -13,7 +13,7 @@
       "id": "page.plugin_js.bytes",
       "label": "Desktop page: plugin.js",
       "unit": "bytes",
-      "value": 25940,
+      "value": 28202,
       "ceiling": 29000
     },
     {
@@ -83,7 +83,7 @@
       "id": "open.page.bytes",
       "label": "Open a Document: page through /proxy",
       "unit": "bytes",
-      "value": 885566,
+      "value": 887681,
       "ceiling": null
     },
     {
@@ -118,7 +118,7 @@
       "id": "open.bytes",
       "label": "Open a Document: bytes",
       "unit": "bytes",
-      "value": 1057953,
+      "value": 1060068,
       "ceiling": 1200000
     },
     {
@@ -146,21 +146,21 @@
       "id": "agents.skill.bytes",
       "label": "Agents: SKILL.md",
       "unit": "bytes",
-      "value": 4209,
+      "value": 4622,
       "ceiling": 4700
     },
     {
       "id": "agents.tools",
       "label": "Agents: tools registered",
       "unit": "count",
-      "value": 10,
+      "value": 11,
       "ceiling": null
     },
     {
       "id": "agents.tools.bytes",
       "label": "Agents: tool schemas (JSON)",
       "unit": "bytes",
-      "value": 5242,
+      "value": 5728,
       "ceiling": 5800
     },
     {

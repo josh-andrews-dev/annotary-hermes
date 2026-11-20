@@ -125,8 +125,15 @@ handed to a Bot whose profile has Annotary off.
   animates it and still under reduced motion. A change to a Bot's face reaches Annotary within
   5 minutes.
 - **Native tools** (no approval prompts, and they work in profiles with no terminal):
-  `annotary_share`, `annotary_read`, `annotary_comment`, `annotary_threads`, `annotary_reply`, `annotary_push_version`,
-  `annotary_handoff`, `annotary_act`, `annotary_list`, `annotary_set_name`, and a skill, `annotary`.
+  `annotary_share`, `annotary_read`, `annotary_comment`, `annotary_threads`, `annotary_reply`, `annotary_markup`,
+  `annotary_push_version`, `annotary_handoff`, `annotary_act`, `annotary_list`, `annotary_set_name`, and a skill,
+  `annotary`.
+- **Questions and drawings.** An agent that puts a decisions table (columns Decision, Options,
+  Decided) in its Markdown, or asks with `options` on a comment, gets choices you answer with a
+  tap in the page; it reads your answers after you Send back or Approve, written into the
+  Decided cells, and a push that would drop one is refused. A drawing you make over a Document in
+  Annotary's iPhone and iPad app reaches the agent as an image (`annotary_markup`) with the text
+  it covers. Chat cards count the answered Questions; you answer them in the page, not the chat.
 - **The Annotary page**: the Document list, then the Document itself: Annotary's own page in a
   sandboxed frame (Annotary's embed mode), fed through this plugin's backend, so it
   works on native Desktop, Desktop over SSH and the Webapp on a phone. Above it, the Document's
@@ -140,7 +147,8 @@ handed to a Bot whose profile has Annotary off.
 
 The plugin, not the model, decides when an agent wakes:
 
-- A plain comment wakes nobody: you can comment as long as you like.
+- A plain comment wakes nobody: you can comment as long as you like. Neither does an answer to a
+  Question: the editor reads the answers when you Send back or Approve.
 - **Send back** or **Approve**, by you or by another Bot, wakes the Document's editor (the Bot
   that shared it) in the chat that shared it, with every open Thread. Never the editor's own.
 - An **@mention** wakes only the Bot it names, to answer, never to edit.
@@ -168,6 +176,7 @@ Disclosed per the Hermes plugin catalog rules. Nothing leaves the machine except
 | A background server | `annotary serve` on `127.0.0.1:7391` | Started when first needed and left running detached, so it outlives gateway restarts. Its update check is off. It and every `annotary` command get a minimal environment: `PATH`, `HOME`, `LANG`, `LC_*`, `TMPDIR`, `TZ` and its own `ANNOTARY_*` settings, never your API keys or other variables. A server an older version started with the whole environment is restarted. `hermes annotary stop` stops it. |
 | Owner password and Token | `$HERMES_ROOT/annotary/secrets.json`, mode 600 | A long random password nobody types (it stops a browser on this machine signing in to the bare server by loopback trust); you reach Annotary only through Hermes's own sign-in. |
 | One Token per profile | `<profile home>/plugin-data/annotary/token`, mode 600 | What that profile's tools act as. Never on a command line or in a log. |
+| Drawings the agent looks at | `<profile home>/plugin-data/annotary/markup/<document>/t3.png` | Written by `annotary_markup`: the images of a Thread's drawings (Markups), so a model that cannot take an image in a tool result can open the file. The same images are on the private server already. The newest 40 are kept, none older than 7 days. |
 | Shared state | `$HERMES_ROOT/annotary/state.json` | Which Member each profile is, each Document's editor and sharing session. No secrets. |
 | Each Bot's face | The private server (from `profile.yaml` and `assets/avatar.*`) | Read from the profile and uploaded to the loopback server with that Bot's own Token, only when it changes. A photo is sent as it is. |
 | The page | `$HERMES_ROOT/desktop-plugins/annotary/` | The package's desktop half (`desktop/plugin.js`), copied there by Hermes itself, as for any plugin with a page. |
@@ -209,7 +218,7 @@ now removes that copy, so Hermes can put the plugin's own page in its place.
 | `hermes annotary enable --all` | Tools on in every profile you have not turned off (a profile made later needs it again) |
 | `hermes annotary enable PROFILE` | Tools on in one profile, including one where you turned them off |
 | `hermes annotary wake on\|off` | Let Send back, Approve and @mentions wake the chat |
-| `hermes annotary doctor` | Check and repair; prints the `webapp:` settings for a VPS or Docker |
+| `hermes annotary doctor` | Check and repair (fails on a Token the server refuses; `setup` replaces it); prints the `webapp:` settings for a VPS or Docker |
 | `hermes annotary stop` / `logs` | Stop the server / its log |
 
 On a VPS, in Docker or on Hermes Cloud, where Desktop's Web Access switch cannot be used, turn the

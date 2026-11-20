@@ -29,7 +29,7 @@ def setup(_args=None) -> int:
     """Install the binary, set up and start the server, reconcile."""
     r = server.ensure_running()
     retired = desktop.retire_standalone_page()
-    report = accounts.reconcile()
+    report = accounts.reconcile(check_tokens=True)
     print(f"Annotary server: {r['outcome']} at {paths.server_url()} (data in {paths.data_dir()})")
     print("Desktop page: part of this plugin; Hermes puts it in place when Desktop or the Webapp loads plugins")
     if retired:
@@ -53,7 +53,7 @@ def status(_args=None) -> int:
 
 def members(_args=None) -> int:
     server.ensure_running()
-    accounts.reconcile()
+    accounts.reconcile(check_tokens=True)
     st = state.load()
     print(f"{'PROFILE':<16} {'HANDLE':<20} {'NAME':<24} STATE")
     you = accounts.person()
@@ -62,7 +62,8 @@ def members(_args=None) -> int:
     off = []
     for pid, m in sorted(st["members"].items()):
         flag = "disabled" if m.get("disabled") else "active"
-        tok = "token ok" if accounts.token_for(pid) else "no token"
+        tok = ("no token" if not accounts.token_for(pid)
+               else "token refused" if accounts.token_refused(pid) else "token ok")
         plugin = "" if m.get("disabled") else ", " + {
             enablement.ON: "Annotary on", enablement.OFF: "Annotary OFF",
             enablement.COPY: "Annotary on (different copy)",
@@ -198,6 +199,11 @@ def doctor(_args=None) -> int:
         missing = [p for p in _profile_ids() if p not in st["members"] or not accounts.token_for(p)]
         check(not missing, f"a Member and Token for every profile ({len(st['members'])} mapped)"
               + (f"; missing: {missing}" if missing else ""), "hermes annotary members")
+        refused = sorted(p for p in _profile_ids() if p not in missing and accounts.token_refused(p))
+        check(not refused, (f"the server refuses the Token of {', '.join(refused)} (invalid, revoked or expired): "
+                            "their agents cannot use Annotary") if refused
+              else "every profile's Token is accepted by the server",
+              "hermes annotary setup  (mints a new Token for each)")
         for pid, what in report.items():
             print(f"     {pid}: {what}")
     except Exception as e:  # noqa: BLE001

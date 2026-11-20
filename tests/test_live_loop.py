@@ -84,12 +84,16 @@ def test_clean_up_removes_only_what_this_run_made(hermes):
     earlier = share_as("coder", "Earlier")
     before = set(state.load()["docs"])
     mine, also_mine, theirs = share_as("coder", "Mine"), share_as("coder", "Mine too"), share_as("bencha", "Theirs")
+    for doc in (earlier, mine):  # a decide run saved a drawing of each
+        (paths.markup_dir("coder") / doc).mkdir(parents=True, exist_ok=True)
+        (paths.markup_dir("coder") / doc / "t1.png").write_bytes(b"png")
     assert live_loop.clean_up(server.owner_token(), "coder", before) == []
 
     docs = state.load()["docs"]
     shares = paths.shares_dir("coder")
     for doc in (mine, also_mine):
         assert purged(doc) and doc not in docs and not (shares / doc).exists()
+    assert not (paths.markup_dir("coder") / mine).exists() and (paths.markup_dir("coder") / earlier).exists()
     for doc, who in ((earlier, "coder"), (theirs, "bencha")):
         assert doc in docs and (paths.shares_dir(who) / doc).exists()
         assert server.api(server.owner_token(), "GET", f"/api/v1/docs/{doc}")["id"] == doc
@@ -139,7 +143,7 @@ def test_a_failed_review_fails_the_run_at_once_and_still_cleans_up(hermes, monke
     monkeypatch.setattr(server, "run_cli", lambda tok, args, **kw: done(out=tok, err="act refused")
                         if args[0] == "act" else real(tok, args, **kw))
     monkeypatch.setattr(live_loop, "Session", FakeSession)
-    monkeypatch.setattr(time, "sleep", lambda s: None)
+    monkeypatch.setattr(live_loop, "sleep", lambda s: None)
     monkeypatch.setattr(sys, "argv", ["live_loop", "--profile", "coder", "--timeout", "30", "--label", "t"])
     started = time.time()
     assert live_loop.main() == 1
@@ -162,3 +166,130 @@ def test_the_exit_code_needs_the_agent_done_and_nothing_left_behind(hermes, monk
     monkeypatch.setattr(live_loop, "clean_up", lambda *a: left)
     monkeypatch.setattr(sys, "argv", ["live_loop", "--profile", "coder"])
     assert live_loop.main() == code
+
+
+# ------------------------------------------------------------------ the decide scenario
+
+
+def table(d1=None, d2=None):
+    return [{"key": "D1", "source": "table", "decided": d1}, {"key": "D2", "source": "table", "decided": d2},
+            {"key": "t9", "source": "thread", "decided": None}]
+
+
+def test_decide_is_done_when_v2_records_both_answers_and_the_drawing_is_opened_and_described():
+    drawing = [{"id": "t3", "replies": [{"author": "coder", "body": "Done in v2: you crossed out D1's text, so I cut it."}]}]
+    assert live_loop.decide_status(2, table("B (@owner)", "A (@owner)"), drawing, "coder", "t3", True)["done"]
+    for version, qs, opened, threads in [
+            (1, table("B", "A"), True, drawing),           # not pushed yet
+            (2, table("B", None), True, drawing),          # an answer not recorded
+            (2, table("B", "A"), False, drawing),          # never looked at the image
+            (2, table("B", "A"), True, [{"id": "t3", "replies": [{"author": "coder", "body": "Thanks."}]}]),
+            (2, table("B", "A"), True, [{"id": "t4", "replies": drawing[0]["replies"]}])]:  # another Thread
+        assert not live_loop.decide_status(version, qs, threads, "coder", "t3", opened)["done"]
+
+
+def test_the_owner_decides_answers_draws_on_the_first_question_and_sends_back(hermes):
+    from test_questions_markup import PLAN
+    accounts_reconcile()
+    doc = share_as("coder", "Wiki decide")
+    path = Path(state.load()["docs"][doc]["path"])
+    path.write_text(PLAN)
+    tools.push_version(tools.Caller("coder"), doc=doc, path=str(path))
+    owner = server.owner_token()
+    drawn = live_loop.owner_decides(owner, doc)
+    line = server.run_cli(owner, ["show", doc]).stdout
+    assert "questions: D1=B D2=A" in line
+    t = server.api(owner, "GET", f"/api/v1/docs/{doc}/threads")["threads"]
+    (mk,) = [x for x in t if x["id"] == drawn]
+    assert mk["markup"]["width"] == 360 and mk["anchor"]["original"]["exact"].startswith("## D1")
+    assert server.api(owner, "GET", f"/api/v1/docs/{doc}")["action"]["id"] == "send-back"
+
+
+def test_the_owner_decides_refuses_a_document_without_the_table(hermes):
+    accounts_reconcile()
+    doc = share_as("coder", "No table")
+    with pytest.raises(live_loop.StepFailed, match="no decisions table rows D1, D2"):
+        live_loop.owner_decides(server.owner_token(), doc)
+
+
+def accounts_reconcile():
+    from annotary_hermes import accounts
+    accounts.reconcile()
+
+
+# ------------------------------------------------------------------ each phase has its own clock
+
+
+class Clock:
+    """Fake time for the run: sleep advances it, and a slow agent can too."""
+
+    def __init__(self):
+        self.t = 1000.0
+
+    def now(self):
+        return self.t
+
+    def sleep(self, s):
+        self.t += s
+
+
+def run_with(monkeypatch, capsys, session, *argv):
+    clock = Clock()
+    monkeypatch.setattr(live_loop, "now", clock.now)
+    monkeypatch.setattr(live_loop, "sleep", clock.sleep)
+    session.clock = clock
+    monkeypatch.setattr(live_loop, "Session", session)
+    order = []
+    real_clean = live_loop.clean_up
+    monkeypatch.setattr(session, "close", lambda self: order.append("close"))
+    monkeypatch.setattr(live_loop, "clean_up", lambda *a: (order.append("clean"), real_clean(*a))[1])
+    monkeypatch.setattr(sys, "argv", ["live_loop", "--profile", "coder", "--label", "t", *argv])
+    code = live_loop.main()
+    out = capsys.readouterr()
+    return code, json.loads(out.out), out.err, order
+
+
+class SlowShare(FakeSession):
+    """Shares after 150 s, then never answers the review."""
+
+    def type(self, text):
+        SlowShare.clock.t += 150
+        SlowShare.made = share_as("coder", "Wiki move")
+
+
+class NeverShares(FakeSession):
+    def type(self, text):
+        pass
+
+
+def test_a_slow_share_still_leaves_the_review_loop_its_whole_limit(hermes, monkeypatch, capsys):
+    code, report, err, order = run_with(monkeypatch, capsys, SlowShare, "--share-timeout", "200", "--timeout", "120")
+    assert code == 1 and report["done"] is False and report["timed_out"] == "review loop"
+    at = {what: t for t, what in report["events"]}
+    sent = next(t for w, t in at.items() if w.startswith("two comments"))
+    (end,) = [t for w, t in at.items() if w.startswith("timed out")]
+    assert end - sent >= 120
+    assert "timed out in the review loop after 120 s" in err
+    assert order == ["close", "clean"]  # the session (and the turn in it) ends before its Document goes
+
+
+def test_a_share_that_never_comes_times_out_in_its_own_phase(hermes, monkeypatch, capsys):
+    code, report, err, order = run_with(monkeypatch, capsys, NeverShares, "--share-timeout", "200", "--timeout", "120")
+    assert code == 1 and report["timed_out"] == "share"
+    assert "timed out in the share after 200 s" in err
+    assert report["events"][-1][0] < 200 + 15 + 10  # the loop's limit was never spent
+    assert order == ["close", "clean"]
+
+
+def test_clean_up_drops_missed_wake_ups_for_the_documents_it_removed(hermes):
+    before = set(state.load()["docs"])
+    earlier = next(iter(before), None)
+    mine = share_as("coder", "Mine")
+
+    def queue(st):
+        st["pending"]["coder"] = [{"doc": mine, "reason": "send-back"}, {"doc": earlier or "other", "reason": "mention"}]
+        st["agent_wakes"][mine] = [1.0]
+    state.update(queue)
+    assert live_loop.clean_up(server.owner_token(), "coder", before) == []
+    st = state.load()
+    assert [w["doc"] for w in st["pending"]["coder"]] == [earlier or "other"] and mine not in st["agent_wakes"]

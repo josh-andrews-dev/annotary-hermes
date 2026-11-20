@@ -114,3 +114,34 @@ def test_the_rule_summary_says_what_the_readme_says_about_approve():
     wording = "After Send back it fixes what you asked, pushes one new Version and answers each Thread; " \
               "after Approve it answers what's waiting and does not push."
     assert wording in readme and wording in summary
+
+
+# ------------------------------------------------------------------ Questions and Markup (annotary v0.8.0)
+
+
+def answered(by, key="D1", option="A"):
+    return {"seq": 9, "type": "question.answered", "by": by, "doc": "d1", "name": "plan",
+            "payload": {"key": key, "option": option, "version": 1}, "mentions": [], "excerpt": ""}
+
+
+def test_an_answer_never_wakes_a_bot():
+    """D5 as written: an Answer is read after Send back or Approve, never on its own."""
+    for by in ("josh", "bencha", "coder"):
+        assert rules.decide(answered(by), managed=MANAGED, editor="coder") == []
+
+
+def test_an_answer_is_not_a_comment_so_it_opens_no_review_and_blocks_no_push():
+    push = ev("version.pushed", "coder")
+    assert "question.answered" not in rules.COMMENT_TYPES
+    assert rules.review_open([push, answered("josh")], managed=MANAGED) is False
+    assert rules.review_open([push, answered("josh"), answered("josh", option="B")], managed=MANAGED) is False
+    # a real comment still opens one, with or without Answers around it
+    assert rules.review_open([push, answered("josh"), ev("thread.created", "josh")], managed=MANAGED) is True
+
+
+def test_a_markup_is_a_comment_like_any_other():
+    """A Markup arrives as thread.created / thread.replied with markup: true: a plain comment."""
+    drawing = ev("thread.created", "josh")
+    drawing["payload"]["markup"] = True
+    assert rules.decide(drawing, managed=MANAGED, editor="coder") == []
+    assert rules.review_open([ev("version.pushed", "coder"), drawing], managed=MANAGED) is True

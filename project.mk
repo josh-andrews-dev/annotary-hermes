@@ -33,8 +33,8 @@ validate: ## Run Hermes's plugin validator on the package (needs Hermes)
 	@python3 scripts/project/validate_package.py
 
 PROFILE ?= coder
-live-loop: ## One live share, Send back, push, reply, resolve loop on a real Hermes (PROFILE=, MODEL=)
-	@python3 scripts/project/live_loop.py --profile $(PROFILE) $(if $(MODEL),--model $(MODEL))
+live-loop: ## One live share, Send back, push, reply, resolve loop on a real Hermes (PROFILE=, MODEL=, SCENARIO=decide)
+	@python3 scripts/project/live_loop.py --profile $(PROFILE) $(if $(MODEL),--model $(MODEL)) $(if $(SCENARIO),--scenario $(SCENARIO))
 
 # What CI runs besides the standard lint.
 project-ci: project-lint project-test

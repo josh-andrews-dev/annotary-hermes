@@ -6,13 +6,13 @@ description: Annotary reviews of your Markdown, reply on every Thread. Share a p
 # Annotary: reviews of what you write
 
 The person reviews your Markdown in Annotary: comments on exact lines, then **Send back** (fix it)
-or **Approve**. Use the `annotary_*` tools; never the `annotary` CLI through the terminal
-(`hermes annotary doctor` is another thing; see the end).
+or **Approve**. Use the `annotary_*` tools, never the `annotary` CLI (`hermes annotary doctor`
+is different; see the end).
 
 ## The loop
 
-1. Wrote a plan, spec or report the person should decide on? `annotary_share` it (`path` to a
-   `.md` file, or `markdown` + `name`). That makes you its **editor**.
+1. Wrote a plan, spec or report the person should decide on? `annotary_share` it (a `.md` `path`,
+   or `markdown` + `name`). That makes you its **editor**.
 2. Show it: in Hermes (Desktop or the Webapp) put the returned `card` line
    (`::annotary{doc="…"}`) on a paragraph of its own; elsewhere, or when asked for a link, give
    `links.webapp` exactly. Never build a link yourself.
@@ -51,16 +51,25 @@ reply wakes no Bot, so @mention another Bot only in a new comment that asks it t
 - `annotary_push_version` refuses mid-review; use `review_over: true` only when the person said
   in this chat that the review is over.
 - Quote Thread ids (`t3`) and text, not line numbers.
+- `markup: true` on a Thread or reply is a drawing over the text: see it with `annotary_markup`.
+- For choices, word each one and its options in the text (`D1. Where it runs`, `A. The box`), then
+  end with a decisions table, answered with a tap. Cells hold keys only:
+
+  | Decision | Options | Decided |
+  |---|---|---|
+  | D1 | A, B | |
+
+  Fix any row in `table_warnings`. Mid-review, `annotary_comment` with `options`. `annotary_read`
+  fills in their answers: keep them when you push (dropping one is refused). An answer wakes nobody.
 - Asked only to read or sum up the comments? Report them, naming who wrote each reply; don't
-  reply or resolve. A Thread that
-  @mentions another Bot is that Bot's to answer.
+  reply or resolve. A Thread that @mentions another Bot is that Bot's to answer.
 - `annotary_list` shows every Document, the person's handle (to @mention them), and any wake-ups
-  you missed. The person wants another name? `annotary_set_name`.
+  you missed.
 
 ## When something is off
 
 - The card shows as plain text, or a link opens Hermes's home page: the Annotary page is off in
-  that browser (Hermes starts it off in each new one). Tell the person to turn on the
+  that browser. Tell the person to turn on the
   Desktop switch on Annotary's card in Capabilities → Plugins; a link opened there offers an Open
   Plugins button.
 - Anything else (a Document that won't open, a tool error, no wake-up): run
