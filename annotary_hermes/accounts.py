@@ -155,6 +155,10 @@ def token_refused(pid: str, root: Path | None = None) -> bool:
 
 
 def _refused(tok: str, handle: str) -> bool:
+    # A Token with a byte outside printable ASCII (a corrupted file) cannot go in a header:
+    # http.client would raise a ValueError that quotes it.
+    if not (tok.isascii() and all(0x21 <= ord(ch) <= 0x7E for ch in tok)):
+        return True
     try:
         return server.api(tok, "GET", "/api/v1/me").get("handle") != handle
     except server.ServerError as e:

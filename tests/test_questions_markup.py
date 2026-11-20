@@ -146,6 +146,7 @@ def test_a_share_passes_on_the_rows_annotary_skipped_and_how_to_fix_them(hermes)
     (warn,) = out["table_warnings"]
     assert "D1 \u2014 Where it runs" in warn and "row skipped" in warn
     assert "D1" in out["table_fix"] and "A, B" in out["table_fix"] and "annotary_push_version" in out["table_fix"]
+    assert out["next"].startswith("First fix the decisions table") and "Do not push again" not in out["next"]
 
 
 def test_a_push_passes_on_the_rows_annotary_skipped(doc):
@@ -458,3 +459,33 @@ def test_the_embed_render_has_the_question_controls_and_the_markup(doc, tmp_path
              if t.get("markup")]
     img = bridge.request({"method": "GET", "path": f"/api/v1/docs/{doc}/markups/{mk}", "binary": True})
     assert img["status"] == 200 and base64.b64decode(img["body"]) == png()
+
+
+SECOND = "\n## More\n\n| Decision | Options | Recommended | Decided |\n|---|---|---|---|\n| D9 | A, B | A | |\n"
+
+
+def test_a_share_with_a_second_table_passes_its_warning_on_and_says_to_fix_it_first(hermes):
+    accounts.reconcile()
+    out = tools.share(caller("coder"), markdown=PLAN + SECOND, name="Two tables")
+    assert any(w.startswith("a second decisions table") for w in out["table_warnings"]), out
+    assert "table_fix" in out and out["next"].startswith("First fix the decisions table"), out
+    assert "annotary_push_version" in out["next"]
+
+
+def test_a_clean_share_says_only_to_wait(hermes):
+    accounts.reconcile()
+    out = tools.share(caller("coder"), markdown=PLAN, name="Clean")
+    assert out["next"] == "Wait for the person's review. Do not push again until they Send back or Approve."
+
+
+def test_a_push_with_a_second_table_gives_the_fix(doc):
+    out = tools.push_version(caller("coder"), doc=doc, markdown=PLAN + SECOND, review_over=True)
+    assert any(w.startswith("a second decisions table") for w in out["table_warnings"]), out
+    assert "table_fix" in out and not any("decisions table" in w for w in out.get("warnings", [])), out
+
+
+def test_an_asset_warning_naming_a_decisions_table_stays_in_warnings(doc):
+    out = tools.push_version(caller("coder"), doc=doc, markdown=PLAN + "\n![x](<decisions table.png>)\n",
+                             review_over=True)
+    assert "table_warnings" not in out and "table_fix" not in out, out
+    assert any("decisions table" in w for w in out["warnings"]), out

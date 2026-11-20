@@ -98,6 +98,8 @@ def api(token: str, method: str, path: str, body: dict | None = None, *, timeout
         raise err from None
     except (urllib.error.URLError, OSError) as e:
         raise ServerError(f"the private Annotary server is unreachable ({e})") from None
+    except ValueError:  # http.client's message quotes the header, Token included: never pass it on
+        raise ServerError("a request to the private Annotary server could not be sent (a malformed Token)") from None
     return json.loads(raw) if raw else {}
 
 

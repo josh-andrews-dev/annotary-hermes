@@ -251,3 +251,85 @@ def test_members_shows_a_refused_token_as_refused(hermes, capsys, monkeypatch):
     cli.members()
     (row,) = [ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("coder ")]
     assert "token refused" in row
+
+
+# A Token file damaged on disk: http.client refuses such a header with a ValueError quoting the Token.
+UNSENDABLE = ["ant_Ab3\nxY9secret", "ant_Ab3\rxY9secret", "ant_Ab3☃xY9secret"]
+CORRUPT = [*UNSENDABLE, "ant_Ab3éxY9secret", "ant_Ab3 xY9secret"]
+
+
+@pytest.mark.parametrize("bad", CORRUPT)
+def test_doctor_counts_a_corrupted_token_as_refused_without_printing_it(webapp, capsys, bad):
+    from annotary_hermes import accounts
+    webapp("Serving at http://127.0.0.1:9120")
+    accounts.reconcile()
+    paths.write_secret(paths.token_path("coder"), bad + "\n")
+    assert accounts.token_refused("coder") is True
+    assert cli.doctor() == 1
+    out = capsys.readouterr().out
+    assert "secret" not in out and "Invalid header" not in out
+    (line,) = [ln for ln in out.splitlines() if "refuses the Token" in ln]
+    assert "coder" in line
+
+
+@pytest.mark.parametrize("bad", CORRUPT)
+def test_setup_and_members_replace_a_corrupted_token(hermes, capsys, bad):
+    from annotary_hermes import accounts, server
+    for verb in (cli.setup, cli.members):
+        accounts.reconcile()
+        paths.write_secret(paths.token_path("coder"), bad + "\n")
+        verb()
+        assert "secret" not in capsys.readouterr().out
+        assert server.api(accounts.token_for("coder"), "GET", "/api/v1/me")["handle"] == accounts.handle_of("coder")
+
+
+@pytest.mark.parametrize("bad", UNSENDABLE)
+def test_a_request_with_a_corrupted_token_never_quotes_it(hermes, bad):
+    from annotary_hermes import server
+    with pytest.raises(server.ServerError) as e:
+        server.api(bad, "GET", "/api/v1/me")
+    assert "secret" not in str(e.value) and "malformed Token" in str(e.value)
+
+
+@pytest.mark.parametrize("err", [None, 500, 503])
+def test_a_server_failure_other_than_401_raises_and_mints_nothing(hermes, monkeypatch, err):
+    from annotary_hermes import accounts, server
+    accounts.reconcile()
+    before = accounts.token_for("coder")
+    real = server.api
+
+    def failing(tok, method, path, *a, **k):
+        if path == "/api/v1/me":
+            e = server.ServerError("the private Annotary server is unreachable (timed out)" if err is None
+                                   else f"HTTP {err}")
+            if err is not None:
+                e.status = err
+            raise e
+        return real(tok, method, path, *a, **k)
+    monkeypatch.setattr(server, "api", failing)
+    minted = []
+    monkeypatch.setattr(accounts, "_mint", lambda *a, **k: minted.append(a) or "ant_new")
+    with pytest.raises(server.ServerError):
+        accounts.token_refused("coder")
+    with pytest.raises(server.ServerError):
+        accounts.reconcile(check_tokens=True)
+    assert minted == [] and accounts.token_for("coder") == before
+
+
+def test_a_token_that_answers_as_another_member_counts_as_refused(hermes, capsys):
+    from annotary_hermes import accounts, server
+    accounts.reconcile()
+    paths.write_secret(paths.token_path("coder"), accounts.token_for("bencha") + "\n")
+    assert accounts.token_refused("coder") is True and accounts.token_refused("bencha") is False
+    assert cli.setup() == 0
+    assert "coder: @coder new Token (the server refused the old one)" in capsys.readouterr().out
+    assert server.api(accounts.token_for("coder"), "GET", "/api/v1/me")["handle"] == accounts.handle_of("coder")
+
+
+def test_members_repairs_a_refused_token(hermes, capsys):
+    from annotary_hermes import accounts, server
+    refuse_token("coder")
+    cli.members()
+    (row,) = [ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("coder ")]
+    assert "token ok" in row
+    assert server.api(accounts.token_for("coder"), "GET", "/api/v1/me")["handle"] == accounts.handle_of("coder")

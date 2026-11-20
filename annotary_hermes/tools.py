@@ -37,6 +37,8 @@ MARKUP_IMAGE_BYTES, MARKUP_TOTAL_BYTES = 1 << 20, 2 << 20
 MARKUP_NAME_RE = re.compile(r"t\d+(?:\.\d+)?\.png")
 DOC_ID_RE = re.compile(r"[a-z0-9]{1,16}")
 FILLED_RE = re.compile(r"^(\d+) answers? written into the decisions table", re.M)
+#: How annotary (v0.8.0) starts each warning about the decisions table, a second one included.
+TABLE_WARNING = ("decisions table", "a second decisions table")
 TABLE_FIX = ("Annotary skipped or questioned these decisions table rows, so the person cannot answer them. "
              "Each cell holds keys only: Decision a bare key (D1), Options the option ids (A, B), e.g. "
              "`| D1 | A, B | |`; put the wording in the text (`D1. Where it runs`, `A. The existing box`). "
@@ -87,7 +89,7 @@ def _cli_json(tok: str, args: list[str], root: Path | None, **kw):
 
 def _table_warnings(pushed: dict) -> dict:
     """The push's warnings about its decisions table (`push --json` `warnings[]`), for the model to fix."""
-    warns = [w for w in pushed.get("warnings") or [] if isinstance(w, str) and w.startswith("decisions table")]
+    warns = [w for w in pushed.get("warnings") or [] if isinstance(w, str) and w.startswith(TABLE_WARNING)]
     return {"table_warnings": warns, "table_fix": TABLE_FIX} if warns else {}
 
 
@@ -282,9 +284,13 @@ def share(c: Caller, *, path: str = "", markdown: str = "", name: str = "", mess
         file = final / file.name
     docs.record_share(doc_id, name=pushed.get("name", ""), profile=c.profile, session_key=c.session_key,
                       surface=c.surface, path=str(file), host=c.host, root=root)
+    table = _table_warnings(pushed)
+    wait = "Wait for the person's review. Do not push again until they Send back or Approve."
     out = {"id": doc_id, "name": pushed.get("name"), "version": pushed.get("version"),
-           "editor": f"@{accounts.handle_of(c.profile, root)}", **_present(c, doc_id), **_table_warnings(pushed),
-           "next": "Wait for the person's review. Do not push again until they Send back or Approve."}
+           "editor": f"@{accounts.handle_of(c.profile, root)}", **_present(c, doc_id), **table,
+           "next": ("First fix the decisions table and push it once with annotary_push_version (table_fix). "
+                    "Then wait for the person's review: no other push until they Send back or Approve.")
+           if table else wait}
     try:
         steps = _setup_steps(c, root)
     except Exception as e:  # noqa: BLE001 — the share happened; a retry would make a duplicate Document
