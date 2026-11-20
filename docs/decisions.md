@@ -477,4 +477,9 @@ The same three guards as annotary's, so one rule reads the same in every Annotar
   and shows a Comment's Markup image (fetched through `/proxy`, as the frame does). Answering is
   the embedded page's; `/doc` carries `questions` only when the Document has one, so its answer
   is unchanged otherwise.
-
+- **A decisions table row Annotary skips is handed back to the model.** `annotary_share` and
+  `annotary_push_version` pass on the `decisions table …` entries of `push --json`'s `warnings[]`
+  as `table_warnings`, with `table_fix` (keys-only cells and an example row), and the skill shows
+  one correct row. A live run's agent wrote the option wording into the cells, every row was
+  skipped and the share still read as a success. Rejected `--strict`, which refuses the whole push
+  over any warning, assets included.

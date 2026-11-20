@@ -136,6 +136,44 @@ def test_a_share_of_a_bound_file_that_drops_an_answer_is_refused_the_same_way(do
     assert out.get("refused") is True and [r["key"] for r in out["rows"]] == ["D2"], out
 
 
+# What the live run's agent wrote: wording in the cells, which Annotary skips with a warning.
+WORDY = PLAN.replace("| D1 | A, B | A | |", "| D1 \u2014 Where it runs | A: Existing box, B: New VM | B | |")
+
+
+def test_a_share_passes_on_the_rows_annotary_skipped_and_how_to_fix_them(hermes):
+    accounts.reconcile()
+    out = tools.share(caller("coder"), markdown=WORDY, name="Wordy plan")
+    (warn,) = out["table_warnings"]
+    assert "D1 \u2014 Where it runs" in warn and "row skipped" in warn
+    assert "D1" in out["table_fix"] and "A, B" in out["table_fix"] and "annotary_push_version" in out["table_fix"]
+
+
+def test_a_push_passes_on_the_rows_annotary_skipped(doc):
+    out = tools.push_version(caller("coder"), doc=doc, markdown=PLAN.replace("| D2 | A, B |", "| D2 | A: SQLite, B |"),
+                             review_over=True)
+    assert out["version"] == 2 and "not an option id" in out["table_warnings"][0], out
+    assert "table_fix" in out
+
+
+def test_a_good_table_has_no_warnings(doc):
+    assert "table_warnings" not in tools.push_version(caller("coder"), doc=doc, markdown=PLAN + "\nMore.\n",
+                                                      review_over=True)
+    assert "table_warnings" not in tools.share(caller("coder"), markdown=PLAN, name="Again")
+
+
+def test_the_skills_example_table_is_one_annotary_accepts(hermes):
+    from conftest import ROOT
+    skill = (ROOT / "skills" / "annotary" / "SKILL.md").read_text()
+    rows = [ln.strip() for ln in skill.splitlines() if ln.strip().startswith("|")]
+    assert rows[0].startswith("| Decision | Options |") and len(rows) >= 3, rows
+    accounts.reconcile()
+    md = "# Plan\n\n## D1. Where it runs\n\nA. The existing box. B. A new VM.\n\n" + "\n".join(rows) + "\n"
+    out = tools.share(caller("coder"), markdown=md, name="Skill example")
+    assert "table_warnings" not in out, out
+    shown = json.loads(owner_cli("show", out["id"], "--json").stdout)
+    assert [q["key"] for q in shown.get("questions") or []] == ["D1"]
+
+
 # ------------------------------------------------------------------ a Question asked on a comment
 
 

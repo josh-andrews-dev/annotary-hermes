@@ -37,6 +37,10 @@ MARKUP_IMAGE_BYTES, MARKUP_TOTAL_BYTES = 1 << 20, 2 << 20
 MARKUP_NAME_RE = re.compile(r"t\d+(?:\.\d+)?\.png")
 DOC_ID_RE = re.compile(r"[a-z0-9]{1,16}")
 FILLED_RE = re.compile(r"^(\d+) answers? written into the decisions table", re.M)
+TABLE_FIX = ("Annotary skipped or questioned these decisions table rows, so the person cannot answer them. "
+             "Each cell holds keys only: Decision a bare key (D1), Options the option ids (A, B), e.g. "
+             "`| D1 | A, B | |`; put the wording in the text (`D1. Where it runs`, `A. The existing box`). "
+             "Fix the table and push it again with annotary_push_version.")
 
 
 @dataclass
@@ -79,6 +83,12 @@ def _cli_json(tok: str, args: list[str], root: Path | None, **kw):
         return json.loads(out) if out else {}
     except ValueError:
         return [json.loads(line) for line in out.splitlines() if line.strip()]
+
+
+def _table_warnings(pushed: dict) -> dict:
+    """The push's warnings about its decisions table (`push --json` `warnings[]`), for the model to fix."""
+    warns = [w for w in pushed.get("warnings") or [] if isinstance(w, str) and w.startswith("decisions table")]
+    return {"table_warnings": warns, "table_fix": TABLE_FIX} if warns else {}
 
 
 def _check_doc(doc: str) -> str:
@@ -273,7 +283,7 @@ def share(c: Caller, *, path: str = "", markdown: str = "", name: str = "", mess
     docs.record_share(doc_id, name=pushed.get("name", ""), profile=c.profile, session_key=c.session_key,
                       surface=c.surface, path=str(file), host=c.host, root=root)
     out = {"id": doc_id, "name": pushed.get("name"), "version": pushed.get("version"),
-           "editor": f"@{accounts.handle_of(c.profile, root)}", **_present(c, doc_id),
+           "editor": f"@{accounts.handle_of(c.profile, root)}", **_present(c, doc_id), **_table_warnings(pushed),
            "next": "Wait for the person's review. Do not push again until they Send back or Approve."}
     try:
         steps = _setup_steps(c, root)
@@ -485,7 +495,9 @@ def push_version(c: Caller, *, doc: str, path: str = "", markdown: str = "", mes
             st["docs"].setdefault(doc_id, {}).update(session_key=c.session_key, **docs.where(c.host))
             st["docs"][doc_id]["path"] = str(file)
         state.update(work, root)
-    return {**pushed, **_present(c, doc_id),
+    table = _table_warnings(pushed)
+    rest = [w for w in pushed.pop("warnings", None) or [] if w not in table.get("table_warnings", ())]
+    return {**pushed, **({"warnings": rest} if rest else {}), **_present(c, doc_id), **table,
             "next": _answer_next(pushed.get("version"))}
 
 
