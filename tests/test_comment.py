@@ -194,7 +194,8 @@ def test_a_comment_on_a_version_that_moved_on_is_refused(doc):
 
 def test_the_clis_own_version_check_is_a_refusal_too(doc, monkeypatch):
     real = tools._head_text
-    monkeypatch.setattr(tools, "_head_text", lambda tok, d, root: (lambda h, t: ({**h, "version": 9}, t))(*real(tok, d, root)))
+    monkeypatch.setattr(tools, "_head_text", lambda tok, d, root, **kw: (lambda h, t, n: ({**h, "version": 9}, t, n))(
+        *real(tok, d, root, **kw)))
     out = tools.comment(caller("bencha"), doc=doc, quote="every 30 seconds", body="x")
     assert out["refused"] and "changed while" in out["reason"]
     assert threads(doc) == []

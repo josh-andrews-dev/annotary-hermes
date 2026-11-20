@@ -18,6 +18,7 @@ provides_tools:
   - annotary_comment
   - annotary_threads
   - annotary_reply
+  - annotary_markup
   - annotary_push_version
   - annotary_handoff
   - annotary_act
