@@ -218,7 +218,7 @@ now removes that copy, so Hermes can put the plugin's own page in its place.
 | `hermes annotary enable --all` | Tools on in every profile you have not turned off (a profile made later needs it again) |
 | `hermes annotary enable PROFILE` | Tools on in one profile, including one where you turned them off |
 | `hermes annotary wake on\|off` | Let Send back, Approve and @mentions wake the chat |
-| `hermes annotary doctor` | Check and repair; prints the `webapp:` settings for a VPS or Docker |
+| `hermes annotary doctor` | Check and repair (fails on a Token the server refuses; `setup` replaces it); prints the `webapp:` settings for a VPS or Docker |
 | `hermes annotary stop` / `logs` | Stop the server / its log |
 
 On a VPS, in Docker or on Hermes Cloud, where Desktop's Web Access switch cannot be used, turn the

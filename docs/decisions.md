@@ -483,3 +483,10 @@ The same three guards as annotary's, so one rule reads the same in every Annotar
   one correct row. A live run's agent wrote the option wording into the cells, every row was
   skipped and the share still read as a success. Rejected `--strict`, which refuses the whole push
   over any warning, assets included.
+- **A refused Token is found by asking the server, not by the file being there.** `doctor` calls
+  `GET /api/v1/me` with each profile's Token and fails naming the profiles it refuses (401, or
+  another Member's handle); `setup` and `members` run the reconcile with `check_tokens`, which
+  mints a new Token for each of them. Chose to leave the check out of the background reconcile a
+  tool call triggers, which would cost a request per profile on every pass; `doctor` itself reports
+  and does not repair, so its FAIL names the fix (`hermes annotary setup`).
+

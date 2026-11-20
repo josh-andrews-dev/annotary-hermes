@@ -147,6 +147,22 @@ def token_for(pid: str, root: Path | None = None) -> str | None:
         return None
 
 
+def token_refused(pid: str, root: Path | None = None) -> bool:
+    """Whether the server refuses *pid*'s Token (401: invalid, revoked or expired) or takes it as
+    another Member's. No Token is not refused. Any other failure raises ServerError."""
+    tok, entry = token_for(pid, root), state.load(root)["members"].get(pid)
+    return bool(tok and entry and not entry.get("disabled") and _refused(tok, entry["handle"]))
+
+
+def _refused(tok: str, handle: str) -> bool:
+    try:
+        return server.api(tok, "GET", "/api/v1/me").get("handle") != handle
+    except server.ServerError as e:
+        if getattr(e, "status", None) == 401:
+            return True
+        raise
+
+
 def _members(owner_tok: str) -> dict[str, dict]:
     return {m["handle"]: m for m in server.api(owner_tok, "GET", "/api/v1/members")["members"]}
 
@@ -175,14 +191,16 @@ def _enable(owner_tok: str, handle: str, root: Path | None) -> str:
     return _mint(owner_tok, handle, root)
 
 
-def reconcile(root: Path | None = None) -> dict:
+def reconcile(root: Path | None = None, *, check_tokens: bool = False) -> dict:
     """Bring Members in step with the profiles. Returns {profile: what happened}. Holds the
-    ``owner`` lock, so it never acts with an owner Token that ``name_person`` is retiring."""
+    ``owner`` lock, so it never acts with an owner Token that ``name_person`` is retiring.
+    *check_tokens* (setup, members) also replaces each Token the server refuses: one request per
+    profile, so the frequent background passes leave it off."""
     with state.locked("owner", root):
-        return _reconcile(root)
+        return _reconcile(root, check_tokens)
 
 
-def _reconcile(root: Path | None) -> dict:
+def _reconcile(root: Path | None, check_tokens: bool = False) -> dict:
     owner_tok = server.owner_token(root)
     owner = server.owner_handle(root)
     profiles = {p.id: p for p in list_profiles(root)}
@@ -246,6 +264,9 @@ def _reconcile(root: Path | None) -> dict:
             if not token_for(pid, root):
                 _write_token(pid, _mint(owner_tok, entry["handle"], root), root)
                 note(pid, f"@{entry['handle']} new Token")
+            elif check_tokens and _refused(token_for(pid, root) or "", entry["handle"]):
+                _write_token(pid, _mint(owner_tok, entry["handle"], root), root)
+                note(pid, f"@{entry['handle']} new Token (the server refused the old one)")
         for pid in profiles:
             entry = mapped.get(pid)
             if not entry or entry.get("disabled"):

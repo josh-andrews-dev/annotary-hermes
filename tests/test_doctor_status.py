@@ -202,3 +202,52 @@ def test_status_does_not_claim_a_turn_ran(hermes, capsys):
     assert [w["outcome"] for w in wakes] == ["woke", "notified", "capped"]  # stored values stay stable
     assert "handed to Hermes" in wakes[0]["result"] and "not show a turn ran" in wakes[0]["result"]
     assert "notification" in wakes[1]["result"] and "Dropped" in wakes[2]["result"]
+
+
+# ------------------------------------------------------------------ Tokens the server refuses
+
+
+def refuse_token(profile):
+    """Leave *profile* a Token file the server no longer accepts, as after a revoke or a lost store."""
+    from annotary_hermes import accounts
+    accounts.reconcile()
+    paths.write_secret(paths.token_path(profile), "revoked-or-from-another-store\n")
+
+
+def test_doctor_fails_naming_each_profile_whose_token_the_server_refuses(webapp, capsys):
+    webapp("Serving at http://127.0.0.1:9120")
+    refuse_token("coder")
+    refuse_token("bencha")
+    assert cli.doctor() == 1
+    out = capsys.readouterr().out
+    (line,) = [ln for ln in out.splitlines() if "refuses the Token" in ln]
+    assert line.startswith("FAIL") and "bencha, coder" in line and "default" not in line
+    assert "fix: hermes annotary setup" in out.split(line, 1)[1].splitlines()[1]
+
+
+def test_doctor_passes_when_every_token_is_accepted(webapp, capsys):
+    from annotary_hermes import accounts
+    webapp("Serving at http://127.0.0.1:9120")
+    accounts.reconcile()
+    cli.doctor()
+    out = capsys.readouterr().out
+    assert "ok  every profile's Token is accepted by the server" in out and "refuses the Token" not in out
+
+
+def test_setup_mints_a_new_token_for_a_refused_one(hermes, capsys):
+    from annotary_hermes import accounts, server
+    refuse_token("coder")
+    before = accounts.token_for("bencha")
+    assert cli.setup() == 0
+    assert "coder: @coder new Token (the server refused the old one)" in capsys.readouterr().out
+    assert server.api(accounts.token_for("coder"), "GET", "/api/v1/me")["handle"] == accounts.handle_of("coder")
+    assert accounts.token_for("bencha") == before  # a working Token is kept
+
+
+def test_members_shows_a_refused_token_as_refused(hermes, capsys, monkeypatch):
+    from annotary_hermes import accounts
+    refuse_token("coder")
+    monkeypatch.setattr(accounts, "reconcile", lambda *a, **k: {})  # show it before any repair
+    cli.members()
+    (row,) = [ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("coder ")]
+    assert "token refused" in row
