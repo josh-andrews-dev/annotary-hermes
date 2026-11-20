@@ -19,7 +19,6 @@ be opened with annotary_markup, and a reply on the drawing's Thread that describ
 from __future__ import annotations
 
 import argparse
-import base64
 import json
 import os
 import pty
@@ -161,6 +160,7 @@ def clean_up(owner: str, profile: str, before: set[str]) -> list[str]:
             failed.append(doc)
             continue
         shutil.rmtree(paths.shares_dir(profile) / doc, ignore_errors=True)
+        shutil.rmtree(paths.markup_dir(profile) / doc, ignore_errors=True)
         removed.append(doc)
 
     def forget(st: dict) -> None:

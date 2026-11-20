@@ -84,12 +84,16 @@ def test_clean_up_removes_only_what_this_run_made(hermes):
     earlier = share_as("coder", "Earlier")
     before = set(state.load()["docs"])
     mine, also_mine, theirs = share_as("coder", "Mine"), share_as("coder", "Mine too"), share_as("bencha", "Theirs")
+    for doc in (earlier, mine):  # a decide run saved a drawing of each
+        (paths.markup_dir("coder") / doc).mkdir(parents=True, exist_ok=True)
+        (paths.markup_dir("coder") / doc / "t1.png").write_bytes(b"png")
     assert live_loop.clean_up(server.owner_token(), "coder", before) == []
 
     docs = state.load()["docs"]
     shares = paths.shares_dir("coder")
     for doc in (mine, also_mine):
         assert purged(doc) and doc not in docs and not (shares / doc).exists()
+    assert not (paths.markup_dir("coder") / mine).exists() and (paths.markup_dir("coder") / earlier).exists()
     for doc, who in ((earlier, "coder"), (theirs, "bencha")):
         assert doc in docs and (paths.shares_dir(who) / doc).exists()
         assert server.api(server.owner_token(), "GET", f"/api/v1/docs/{doc}")["id"] == doc

@@ -87,6 +87,28 @@ def test_a_comment_is_anchored_on_the_versions_own_bytes_not_the_filled_text(doc
     assert shown["anchor"]["original"]["exact"] == "D1 | A, B | A | |"
 
 
+def test_a_quote_with_a_filled_decided_cell_is_refused_with_what_to_quote(doc, monkeypatch):
+    answer(doc, "D1", "B")
+    (row,) = [ln for ln in tools.read(caller("bencha"), doc=doc)["text"].splitlines() if ln.startswith("| D1 |")]
+    out = tools.comment(caller("bencha"), doc=doc, quote=row, body="Why B?")
+    assert out["refused"] is True and "Decided cell" in out["reason"] and "annotary_read" not in out["reason"]
+    assert "Decision or Options cells" in out["reason"]
+    out = tools.comment(caller("bencha"), doc=doc, quote="Not in it at all.", body="?")
+    assert out["reason"].startswith("That quote is not in this Version.")
+    pulls = []
+    real = server.run_cli
+    monkeypatch.setattr(server, "run_cli", lambda tok, args, **kw: (pulls.append(args[0]), real(tok, args, **kw))[1])
+    assert "refused" not in tools.comment(caller("bencha"), doc=doc, quote="Option A: SQLite.", body="Ok.")
+    assert pulls.count("pull") == 1
+
+
+def test_a_document_named_like_the_questions_line_has_no_questions(hermes):
+    accounts.reconcile()
+    d = tools.share(caller("coder"), markdown="# Note\n\nPlain.\n", name="questions: D1=B")["id"]
+    assert docs.questions_line(server.owner_token(), d) == ""
+    assert "questions" not in tools.threads(caller("coder"), doc=d)
+
+
 def test_a_push_that_drops_an_answer_is_refused_with_the_rows_to_put_in(doc, monkeypatch):
     answer(doc, "D1", "B")
     seen = []
@@ -220,12 +242,118 @@ def test_the_markup_tool_on_a_thread_without_one_says_so(doc):
     assert out["markup"] is None and "no drawing" in out["note"]
 
 
-def test_the_markup_folder_stays_bounded(doc, tmp_path, monkeypatch):
+def _old_drawing(folder, doc_id, name, age=0.0):
+    import os, time
+    (folder / doc_id).mkdir(parents=True, exist_ok=True)
+    p = folder / doc_id / name
+    p.write_bytes(png())
+    t = time.time() - age
+    os.utime(p, (t, t))
+    return p
+
+
+def test_the_markup_folder_stays_bounded_and_keeps_this_calls_drawings(doc, tmp_path, monkeypatch):
     monkeypatch.setattr(tools, "MARKUP_KEEP", 1)
+    folder = paths.markup_dir("coder")
+    older = _old_drawing(folder, "zzzzzzzz", "t4.png", age=60)
+    stale = _old_drawing(folder, "yyyyyyyy", "t2.1.png", age=tools.MARKUP_TTL + 60)
     post_markup(tmp_path, doc)
     post_markup(tmp_path, doc, thread="t1", body="more")
+    out = tools.markup(caller("coder"), doc=doc, thread="t1")
+    # More drawings than MARKUP_KEEP in this call: both stay, and both are shown.
+    assert sorted(p.name for p in (folder / doc).iterdir()) == ["t1.1.png", "t1.png"]
+    assert len(out["content"]) == 3
+    assert not older.exists() and not stale.exists()
+    assert not (folder / "zzzzzzzz").exists() and not (folder / "yyyyyyyy").exists()
+
+
+def test_a_thread_without_drawings_leaves_no_empty_folder(doc):
+    tools.comment(caller("bencha"), doc=doc, quote="Option A: SQLite.", body="Hm.")
     tools.markup(caller("coder"), doc=doc, thread="t1")
-    assert len(list(paths.markup_dir("coder").rglob("*.png"))) == 1
+    assert not (paths.markup_dir("coder") / doc).exists()
+
+
+def test_pruning_skips_symlinks_and_files_it_did_not_write(doc, tmp_path, monkeypatch):
+    monkeypatch.setattr(tools, "MARKUP_KEEP", 1)
+    folder = paths.markup_dir("coder")
+    folder.mkdir(parents=True, exist_ok=True)
+    (tmp_path / "empty").mkdir()
+    (folder / "linkdir00").symlink_to(tmp_path / "empty", target_is_directory=True)
+    outside = tmp_path / "theirs.png"
+    outside.write_bytes(png())
+    (folder / "aaaaaaaa").mkdir()
+    (folder / "aaaaaaaa" / "t9.png").symlink_to(outside)
+    deep = _old_drawing(folder / "aaaaaaaa", "nested", "t3.png", age=tools.MARKUP_TTL + 60)
+    other = _old_drawing(folder, "bbbbbbbb", "notes.png", age=tools.MARKUP_TTL + 60)
+    post_markup(tmp_path, doc)
+    for _ in range(2):  # a later call must still work
+        out = tools.markup(caller("coder"), doc=doc, thread="t1")
+        assert out["_multimodal"] is True
+    assert (folder / "linkdir00").is_symlink() and (tmp_path / "empty").is_dir()
+    assert outside.exists() and (folder / "aaaaaaaa" / "t9.png").is_symlink()
+    assert deep.exists() and other.exists()
+
+
+def test_the_markup_tool_refuses_a_bad_document_id_or_drawing_path(doc, tmp_path, monkeypatch):
+    post_markup(tmp_path, doc)
+    real = docs.resolve_id
+    monkeypatch.setattr(docs, "resolve_id", lambda *a, **k: {**real(*a, **k), "id": "../escape"})
+    with pytest.raises(tools.ToolError, match="Document id"):
+        tools.markup(caller("coder"), doc=doc, thread="t1")
+    monkeypatch.setattr(docs, "resolve_id", real)
+    out_dir = paths.markup_dir("coder") / doc
+    elsewhere = tmp_path / "t1.png"
+    elsewhere.write_bytes(png())
+    linked = out_dir / "t7.png"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    linked.symlink_to(elsewhere)
+    for bad in (str(elsewhere), str(linked), str(out_dir / "t1.png.txt"), str(out_dir / ".." / doc / ".." / "t1.png")):
+        thread = {"id": "t1", "markup": {"path": bad, "width": 1, "height": 1}, "replies": []}
+        monkeypatch.setattr(tools, "_cli_json", lambda *a, _t=thread, **k: [_t])
+        with pytest.raises(tools.ToolError, match="unexpected drawing path"):
+            tools.markup(caller("coder"), doc=doc, thread="t1")
+    assert elsewhere.exists()
+
+
+def noisy_png(kib: int) -> bytes:
+    """A PNG about *kib* KiB that does not compress, as a real drawing over a photo of text might."""
+    import os
+    w = 512
+    h = kib * 1024 // (w * 3) + 1
+    raw = b"".join(b"\x00" + os.urandom(w * 3) for _ in range(h))
+
+    def chunk(t, d):
+        return struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d) & 0xFFFFFFFF)
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+
+
+def test_typical_drawings_are_inlined_and_an_oversized_one_is_only_named(doc, tmp_path, monkeypatch):
+    (tmp_path / "m.json").write_text(json.dumps({"strokes": [{"color": "#dd0000", "width": 3, "points": [[1, 1, 0]]}]}))
+    for i, what in enumerate((["thread", "new", doc, "3:0-3:20"], ["thread", "reply", doc, "t1"])):
+        (tmp_path / f"n{i}.png").write_bytes(noisy_png(400))
+        owner_cli(*what, "--markup", str(tmp_path / f"n{i}.png"), "--strokes", str(tmp_path / "m.json"), "--json")
+    out = tools.markup(caller("coder"), doc=doc, thread="t1")
+    assert len(out["content"]) == 3 and "too large" not in out["text_summary"]
+    # One over the per-image cap: no image, and the text says how to open the saved file.
+    monkeypatch.setattr(tools, "MARKUP_IMAGE_BYTES", 300 * 1024)
+    out = tools.markup(caller("coder"), doc=doc, thread="t1")
+    assert len(out["content"]) == 1
+    assert out["text_summary"].count("too large to show here: open it with vision_analyze") == 2
+    # Under the per-image cap, but the two together over the total: the first only.
+    monkeypatch.setattr(tools, "MARKUP_IMAGE_BYTES", 1 << 20)
+    monkeypatch.setattr(tools, "MARKUP_TOTAL_BYTES", 600 * 1024)
+    out = tools.markup(caller("coder"), doc=doc, thread="t1")
+    text = out["content"][0]["text"]
+    assert len(out["content"]) == 2 and text.count("too large") == 1
+    (line,) = [ln for ln in text.splitlines() if "too large" in ln]
+    assert line.startswith("- t1.1 ") and str(paths.markup_dir("coder") / doc / "t1.1.png") in line
+
+
+def test_the_image_caps_fit_what_providers_take(doc):
+    # Anthropic refuses an image over 5 MB; base64 grows a file by 4/3.
+    assert tools.MARKUP_IMAGE_BYTES * 4 / 3 < 5_000_000 and tools.MARKUP_TOTAL_BYTES * 4 / 3 < 4 << 20
+    assert tools.MARKUP_IMAGE_BYTES >= 768 * 1024
 
 
 def test_the_handler_passes_the_multimodal_result_through_and_json_encodes_the_rest(doc, tmp_path):

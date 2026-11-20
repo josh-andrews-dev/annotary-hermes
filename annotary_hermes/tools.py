@@ -13,6 +13,7 @@ import logging
 import re
 import secrets
 import shutil
+import stat
 import tempfile
 import time
 import urllib.parse
@@ -31,6 +32,10 @@ ASK_MIN, ASK_MAX, ASK_LABEL_MAX = 2, 6, 80
 MARKUP_KEEP, MARKUP_TTL = 40, 7 * 86400
 #: Images one annotary_markup result hands the model; every saved path is still named.
 MARKUP_IMAGES_MAX = 4
+#: Bytes of PNG one result inlines, per image and in all (docs/decisions.md); a larger one is named only.
+MARKUP_IMAGE_BYTES, MARKUP_TOTAL_BYTES = 1 << 20, 2 << 20
+MARKUP_NAME_RE = re.compile(r"t\d+(?:\.\d+)?\.png")
+DOC_ID_RE = re.compile(r"[a-z0-9]{1,16}")
 FILLED_RE = re.compile(r"^(\d+) answers? written into the decisions table", re.M)
 
 
@@ -381,8 +386,12 @@ def comment(c: Caller, *, doc: str, quote: str, body: str, version: int = 0, opt
     moved = "Read it again with annotary_read, then comment on what it says now."
     if version and int(version) != head_version:
         return refused(f"You read Version {version}, but this Document is now at Version {head_version}. {moved}")
-    anchor, why = _find_quote(text, _quoted_passage(text, quote))
+    passage = _quoted_passage(text, quote)
+    anchor, why = _find_quote(text, passage)
     if not anchor:
+        if passage not in text and _in_filled_text(tok, doc_id, quote, root):
+            why = ("That quote includes an Answer filled into a Decided cell, which is not in the pushed Version "
+                   "yet. Quote the Decision or Options cells, or the decision's prose, instead.")
         return refused(why)
     ask = [a for label in asks for a in ("--ask", label)]
     r = server.run_cli(tok, ["thread", "new", doc_id, anchor, "-m", "-", "--version", str(head_version), *ask,
@@ -396,6 +405,12 @@ def comment(c: Caller, *, doc: str, quote: str, body: str, version: int = 0, opt
         out["asked"] = (f"A Question with {len(asks)} options: the person answers with a tap. An answer wakes "
                         "nobody; annotary_threads shows it (question, answer).")
     return out
+
+
+def _in_filled_text(tok: str, doc_id: str, quote: str, root: Path | None) -> bool:
+    """Whether *quote* is in the head as annotary_read shows it, the Answers in its Decided cells."""
+    _, filled_text, filled = _head_text(tok, doc_id, root, as_pushed=False)
+    return bool(filled) and _quoted_passage(filled_text, quote) in filled_text
 
 
 def _ask_labels(options) -> list[str]:
@@ -561,15 +576,51 @@ def set_name(c: Caller, *, name: str, root: Path | None = None) -> dict:
     return {**{k: out[k] for k in ("handle", "name")}, "said": said}
 
 
-def _prune(folder: Path, now: float) -> None:
-    """Keep the Markup folder bounded: the newest MARKUP_KEEP images, none older than MARKUP_TTL."""
-    files = sorted((p for p in folder.rglob("*.png") if p.is_file()), key=lambda p: p.stat().st_mtime, reverse=True)
-    for i, p in enumerate(files):
-        if i >= MARKUP_KEEP or now - p.stat().st_mtime > MARKUP_TTL:
+def _entries(folder: Path) -> list[Path]:
+    try:
+        return list(folder.iterdir())
+    except (FileNotFoundError, NotADirectoryError):
+        return []
+
+
+def _markup_dirs(folder: Path) -> list[Path]:
+    """The Markup folder's doc-id folders: real directories only, never a symlink."""
+    return [d for d in _entries(folder) if DOC_ID_RE.fullmatch(d.name) and not d.is_symlink() and d.is_dir()]
+
+
+def _prune(folder: Path, now: float, keep: frozenset = frozenset()) -> None:
+    """Keep the Markup folder bounded: the newest MARKUP_KEEP drawings, none older than MARKUP_TTL.
+    *keep* (``(doc_id, name)`` pairs, this call's drawings) is never removed and counts first."""
+    found = []
+    for d in _markup_dirs(folder):
+        for p in _entries(d):
+            if not MARKUP_NAME_RE.fullmatch(p.name) or (d.name, p.name) in keep:
+                continue
+            try:
+                st = p.lstat()
+            except FileNotFoundError:
+                continue
+            if stat.S_ISREG(st.st_mode):
+                found.append((st.st_mtime, p))
+    found.sort(key=lambda f: f[0], reverse=True)
+    for i, (mtime, p) in enumerate(found, start=len(keep)):
+        if i >= MARKUP_KEEP or now - mtime > MARKUP_TTL:
             p.unlink(missing_ok=True)
-    for d in folder.iterdir():
-        if d.is_dir() and not any(d.iterdir()):
+    for d in _markup_dirs(folder):
+        try:
             d.rmdir()
+        except OSError:  # not empty, or gone already
+            pass
+
+
+def _saved_drawing(out_dir: Path, path) -> Path:
+    """The file `thread show --markup` says it wrote: a regular file named like t3.png or t3.1.png
+    directly in *out_dir*, never a symlink."""
+    p = Path(str(path))
+    if (not MARKUP_NAME_RE.fullmatch(p.name) or p.is_symlink() or not p.is_file()
+            or p.resolve().parent != out_dir.resolve()):
+        raise ToolError(f"annotary gave an unexpected drawing path: {p.name}")
+    return p
 
 
 @_with_pending
@@ -582,27 +633,44 @@ def markup(c: Caller, *, doc: str, thread: str, root: Path | None = None) -> dic
     doc = _check_doc(doc)
     if not re.fullmatch(r"t\d+", thread or ""):
         raise ToolError("thread must be a Thread id like t3")
-    doc_id = docs.resolve_id(doc, tok, root)["id"]
+    doc_id = str(docs.resolve_id(doc, tok, root)["id"])
+    if not DOC_ID_RE.fullmatch(doc_id):
+        raise ToolError(f"annotary gave an unexpected Document id: {doc_id[:40]!r}")
     folder = paths.markup_dir(c.profile, root)
     out_dir = folder / doc_id
+    if out_dir.is_symlink():
+        raise ToolError(f"{out_dir} is a symlink: remove it, then ask again")
     out_dir.mkdir(parents=True, exist_ok=True)
     rows = _cli_json(tok, ["thread", "show", doc_id, thread, "--markup", str(out_dir)], root)
     t = rows[0] if isinstance(rows, list) and rows else rows
     comments = [t, *[r for r in t.get("replies") or [] if not r.get("deleted")]]
-    drawn = [(cm, Path(cm["markup"]["path"])) for cm in comments if (cm.get("markup") or {}).get("path")]
-    _prune(folder, time.time())
+    drawn = [(cm, _saved_drawing(out_dir, cm["markup"]["path"])) for cm in comments
+             if (cm.get("markup") or {}).get("path")]
     if not drawn:
+        _prune(folder, time.time())
         return {"doc": doc_id, "thread": thread, "markup": None, "note": f"{thread} holds no drawing."}
+    tried = [p for _, p in drawn[-MARKUP_IMAGES_MAX:]]
+    shown, budget = set(), MARKUP_TOTAL_BYTES
+    for p in tried:
+        size = p.lstat().st_size
+        if size <= min(MARKUP_IMAGE_BYTES, budget):
+            shown.add(p)
+            budget -= size
     orig = ((t.get("anchor") or {}).get("original") or {})
     where = f'the source text "{orig["exact"]}"' if orig.get("exact") else "the whole Document"
     lines = [f"Drawings on {thread} of {doc_id}, over {where} (the drawing is on that text, as the person saw it):"]
+    images = []
     for cm, p in drawn:
         m = cm["markup"]
         body = " ".join(str(cm.get("body") or "").split())
+        big = p in tried and p not in shown
         lines.append(f"- {cm['id']} by @{server.person_handle(cm.get('author') or '')}: {m.get('width')}x{m.get('height')} "
-                     f"px image saved at {p}" + (f'; its note: "{body}"' if body else ""))
+                     f"px image saved at {p}" + (f'; its note: "{body}"' if body else "")
+                     + ("; too large to show here: open it with vision_analyze" if big else ""))
+        if p in shown:
+            images.append({"type": "image_url", "image_url": {
+                "url": "data:image/png;base64," + base64.b64encode(p.read_bytes()).decode("ascii")}})
+    _prune(folder, time.time(), frozenset((doc_id, p.name) for _, p in drawn))
     text = "\n".join(lines)
-    images = [{"type": "image_url", "image_url": {"url": "data:image/png;base64," + base64.b64encode(p.read_bytes()).decode("ascii")}}
-              for _, p in drawn[-MARKUP_IMAGES_MAX:] if p.is_file()]
     return {"_multimodal": True, "content": [{"type": "text", "text": text}, *images],
             "text_summary": text + "\nIf you cannot see the image here, open each saved file with vision_analyze."}

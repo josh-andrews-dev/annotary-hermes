@@ -12,7 +12,6 @@ copy claims it there (see `Watcher._owns`), however the session's host changes a
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import re

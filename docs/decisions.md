@@ -432,6 +432,19 @@ The same three guards as annotary's, so one rule reads the same in every Annotar
   Hermes internals. The plugin's handler JSON-encodes every other result as before. The
   `text_summary` names each saved PNG and the Thread's quoted source text, so such a model can open
   the file with `vision_analyze`. At most four images go in one result; every path is named.
+- **An image is inlined only up to 1 MiB, and one result to 2 MiB of PNG.** Hermes re-sends a
+  tool result's images on every later turn and does not shrink a plugin's: its own vision tools
+  embed at most `vision.embed_target_bytes` (256 KB by default, 4 MiB at most) and drop a data URL
+  over 20 MB; Anthropic refuses an image over 5 MB. Base64 grows a file by 4/3, so the caps put at
+  most about 2.7 MiB in the context, while a normal drawing (a crop of at most 1,568 px on its long
+  edge, a few hundred KiB) is still shown. A file over a cap is checked by its size before it is
+  read, gets no image, and its line says to open the saved path with `vision_analyze`. Rejected
+  the server's own 2 MiB per image, which lets one result put about 10.7 MiB of base64 in the
+  context, and resizing here, which needs an image library the plugin does not ship.
+- **The Markup folder is pruned after the images are read, never of this call's files**, and only
+  its `<document id>/t3.png` or `t3.1.png` files: a symlink, a deeper folder or another file name
+  is left alone. A drawing path the CLI returns must be a regular file directly in that
+  Document's folder, and the Document id must look like one, or the tool refuses.
 - **The images are saved under the profile's own plugin folder**
   (`<profile home>/plugin-data/annotary/markup/<document>/`), written by the CLI's
   `thread show --markup DIR`, kept to the newest 40 and none older than 7 days; rejected a
@@ -448,7 +461,12 @@ The same three guards as annotary's, so one rule reads the same in every Annotar
   do not fit the tool schemas' ceiling (5,728 of 5,800 bytes with one).
 - **The `questions:` line comes from the CLI.** `annotary_threads` and the wake-up digest take it
   from `show DOC` (`D4=B D5=- t9=A*`), and each Question Thread's `answer` from that line; rejected
-  formatting it from the JSON here, which would drift from annotary's `show`.
+  formatting it from the JSON here, which would drift from annotary's `show`. Only the line
+  after the header is read, where `show` prints it, so a Document named `questions: …` is not
+  taken for one.
+- **A quote that includes a filled `Decided` cell is refused with what to quote instead.** Such a
+  quote is in `annotary_read`'s text but not in the pushed bytes a comment anchors on; the plugin
+  reads the filled text only after the quote misses, so a normal comment costs no extra `pull`.
 - **An Answer wakes nobody (D5 as written).** `question.answered` is not a comment, so
   `rules.decide` ignores it and it neither opens a review nor blocks a push; a Markup is a
   `thread.created` / `thread.replied` with `markup: true`, a plain comment. Send back and Approve

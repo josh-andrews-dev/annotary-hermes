@@ -100,9 +100,9 @@ def questions_line(token: str, doc: str, root: Path | None = None) -> str:
     r = server.run_cli(token, ["show", doc], root=root)
     if r.returncode != 0:
         return ""
-    for line in r.stdout.splitlines():
-        if line.startswith("questions: "):
-            return line[len("questions: "):].strip()
+    lines = r.stdout.splitlines()  # the header, then the questions line only when there are Questions
+    if len(lines) > 1 and lines[1].startswith("questions: "):
+        return lines[1][len("questions: "):].strip()
     return ""
 
 
