@@ -59,7 +59,7 @@ uncompressed. Each route is called as the page calls it (`desktop/plugin.js`).
 ## What is not counted, and why
 
 - A live-feed poll that carries events: its size is the events', not the plugin's. Image Assets
-  (`data-cd-src`) are not in the fixture.
+  (`data-cd-src`), Markup images (`data-cd-mk`) and Questions are not in the fixture.
 - Anything only a browser does: running the page's scripts, Hermes's own page and its SDK, and
   what Hermes adds around a backend answer (its sign-in, its gateway bridge).
 - The chat card: it calls `/doc`, already counted as `open.doc.bytes`.

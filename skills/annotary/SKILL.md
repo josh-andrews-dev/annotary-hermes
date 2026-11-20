@@ -51,6 +51,11 @@ reply wakes no Bot, so @mention another Bot only in a new comment that asks it t
 - `annotary_push_version` refuses mid-review; use `review_over: true` only when the person said
   in this chat that the review is over.
 - Quote Thread ids (`t3`) and text, not line numbers.
+- `markup: true` on a Thread or reply is a drawing over the text: see it with `annotary_markup`.
+- For choices, write a decisions table (columns Decision, Options, Decided); the person answers with
+  a tap. Mid-review, `annotary_comment` with `options`. `annotary_read` gives the text with their
+  answers in the Decided cells: keep them when you push (a push that drops one is refused). An
+  answer wakes nobody.
 - Asked only to read or sum up the comments? Report them, naming who wrote each reply; don't
   reply or resolve. A Thread that
   @mentions another Bot is that Bot's to answer.

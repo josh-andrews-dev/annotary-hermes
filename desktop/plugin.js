@@ -163,7 +163,35 @@ function TextBox({ value, onChange, placeholder, rows = 2 }) {
   })
 }
 
-function ThreadCard({ doc, t, onDone }) {
+// A Comment's Markup (a drawing made in the app), fetched through the backend as the frame does.
+const HASH_RE = /^[0-9a-f]{64}$/
+function MarkupImage({ doc, m }) {
+  const [src, setSrc] = useState(null)
+  useEffect(() => {
+    let url = null
+    let live = true
+    if (HASH_RE.test(m.image)) {
+      rest('/proxy', { method: 'POST', body: { method: 'GET', path: `/api/v1/docs/${doc}/markups/${m.image}`, headers: {}, body: null, binary: true }, timeoutMs: 60000 })
+        .then(r => { if (live && r.status === 200) setSrc(url = URL.createObjectURL(new Blob([b64ToBytes(r.body)], { type: 'image/png' }))) }).catch(() => {})
+    }
+    return () => { live = false; if (url) URL.revokeObjectURL(url) }
+  }, [doc, m.image])
+  return jsx('img', { src: src || undefined, alt: 'Markup', width: m.width, height: m.height, 'data-annotary-markup': '', style: { maxWidth: '100%', height: 'auto', background: '#fff', borderRadius: 4 } })
+}
+
+/** The chat card's count of Questions answered (a decided one counts), or null with none. */
+export function answeredCount(qs) {
+  if (!qs?.length) return null
+  return `${qs.filter(q => q.decided || q.answers?.length).length} of ${qs.length} answered`
+}
+
+/** One Question, read-only (answering is the embedded page's): its options, then who chose what. */
+export function questionText(q) {
+  const who = q.decided ? `decided: ${q.decided}` : q.answers?.length ? q.answers.map(a => `${a.option} @${a.by}`).join(', ') : 'unanswered'
+  return `${q.key}: ${q.options.join(' · ')} → ${who}`
+}
+
+function ThreadCard({ doc, t, qs, onDone }) {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const send = async resolve => {
@@ -175,16 +203,19 @@ function ThreadCard({ doc, t, onDone }) {
     } catch (err) { host.notifyError(err, 'Could not reply') } finally { setBusy(false) }
   }
   const quote = t.anchor?.original?.exact
+  const q = (qs || []).find(x => x.key === (t.question || (t.options ? t.id : null)))
   return jsxs('div', {
     'data-annotary-thread': t.id,
     style: { ...box, display: 'flex', flexDirection: 'column', gap: 6 },
     children: [
       jsxs('div', { style: { fontSize: 12, ...muted }, children: [`${t.id} · @${t.author}`, quote ? ` · “${quote.slice(0, 80)}”` : ' · whole Document'] }),
+      q && jsx('div', { 'data-annotary-question': q.key, style: { fontSize: 13, fontWeight: 500 }, children: questionText(q) }),
+      t.markup && jsx(MarkupImage, { doc, m: t.markup }),
       jsx('div', { style: { whiteSpace: 'pre-wrap' }, children: t.body }),
       ...(t.replies || []).map(r => jsxs('div', {
         key: r.id,
         style: { marginLeft: 12, paddingLeft: 8, borderLeft: '2px solid var(--ui-stroke-secondary)', whiteSpace: 'pre-wrap' },
-        children: [jsx('span', { style: { fontSize: 12, ...muted }, children: `@${r.author}  ` }), r.body]
+        children: [jsx('span', { style: { fontSize: 12, ...muted }, children: `@${r.author}  ` }), r.markup && jsx(MarkupImage, { doc, m: r.markup }), r.body]
       })),
       jsx(TextBox, { value: text, onChange: setText, placeholder: 'Reply…', rows: 1 }),
       jsxs('div', {
@@ -407,8 +438,13 @@ function NativeDocView({ doc, onChanged }) {
         style: { ...box, padding: 0, height: '45vh', minHeight: 200 },
         children: jsx(SandboxedFrame, { src: themed(d.html), title: d.name, style: { width: '100%', height: '100%', border: 0 } })
       }),
+      d.questions && jsxs('div', {
+        'data-annotary-questions': '', style: { ...box, display: 'flex', flexDirection: 'column', gap: 4 },
+        children: [jsx('div', { style: { fontWeight: 600 }, children: `Questions · ${answeredCount(d.questions)}` }),
+          ...d.questions.map(q => jsx('div', { key: q.key, children: questionText(q) }))]
+      }),
       jsx('div', { style: { fontWeight: 600 }, children: `${d.threads.length} open Thread${d.threads.length === 1 ? '' : 's'}${d.resolved ? ` · ${d.resolved} resolved` : ''}` }),
-      ...d.threads.map(t => jsx(ThreadCard, { key: t.id, doc: d.id, t, onDone: refresh })),
+      ...d.threads.map(t => jsx(ThreadCard, { key: t.id, doc: d.id, t, qs: d.questions, onDone: refresh })),
       jsxs('div', {
         style: { display: 'flex', flexDirection: 'column', gap: 6 },
         children: [
@@ -489,7 +525,7 @@ function AnnotaryCard({ attrs }) {
         style: { flex: 1, minWidth: 0 },
         children: [
           jsx('div', { style: { fontWeight: 600 }, children: d ? d.name : `Annotary ${doc}` }),
-          jsx('div', { style: { fontSize: 12, ...muted }, children: d ? [`v${d.version}`, `${d.threads.length} open`, d.action ? actionTaken(d.action) : null].filter(Boolean).join(' · ') : 'Loading…' })
+          jsx('div', { style: { fontSize: 12, ...muted }, children: d ? [`v${d.version}`, `${d.threads.length} open`, answeredCount(d.questions), d.action ? actionTaken(d.action) : null].filter(Boolean).join(' · ') : 'Loading…' })
         ]
       }),
       jsx(Button, { size: 'sm', onClick: () => host.navigate(`${PATH}?doc=${doc}`), children: 'Open' })

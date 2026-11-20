@@ -6,7 +6,7 @@ works from every surface: native Desktop, Desktop over SSH, the Webapp on a phon
     GET  /status             server, wake-ups, whether the server has embed mode
     POST /seen               the page registered (Desktop, or a browser where it is on)
     GET  /documents          the Document list, with each Document's editor
-    GET  /doc?id=ID          one Document: header, rendered HTML, open Threads, Actions, editor
+    GET  /doc?id=ID          one Document: header, rendered HTML, open Threads, Actions, editor, Questions
     POST /act      {doc, action}
     POST /comment  {doc, text}               a Comment on the whole Document
     POST /reply    {doc, thread, text, resolve?}
@@ -152,7 +152,20 @@ def _doc(doc: str) -> dict:
         "resolved": sum(1 for t in threads if t.get("resolved")),
         "html": html.decode("utf-8", "replace") if code == 200 and len(html) <= MAX_BRIDGE_BYTES else None,
         **_editor_view(state.load(), head["id"]),
+        **_questions(tok, doc),
     }
+
+
+def _questions(tok: str, doc: str) -> dict:
+    """The Document's Questions, trimmed to what the cards show read-only (answering is the embedded
+    page's): only when it has one, so a Document without Questions answers as before."""
+    rows = server.api(tok, "GET", f"/api/v1/docs/{doc}/questions").get("questions") or []
+    if not rows:
+        return {}
+    return {"questions": [{"key": q.get("key"), "options": [" ".join(filter(None, (o.get("id"), o.get("label")))) for o in q.get("options") or []],
+                           "decided": q.get("decided"),
+                           "answers": [{"by": a.get("by"), "option": a.get("option")} for a in q.get("answers") or []]}
+                          for q in rows]}
 
 
 @router.get("/doc")

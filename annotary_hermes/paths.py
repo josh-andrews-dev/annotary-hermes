@@ -83,6 +83,11 @@ def shares_dir(profile: str, root: Path | None = None) -> Path:
     return profile_home(profile, root) / "plugin-data" / PLUGIN_ID / "shares"
 
 
+def markup_dir(profile: str, root: Path | None = None) -> Path:
+    """Where ``annotary_markup`` saves a Thread's drawings for the model to open (kept bounded)."""
+    return profile_home(profile, root) / "plugin-data" / PLUGIN_ID / "markup"
+
+
 def desktop_page_target(root: Path | None = None) -> Path:
     return (root or hermes_root()) / "desktop-plugins" / PLUGIN_ID
 

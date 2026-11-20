@@ -21,6 +21,12 @@ opens an interactive session of the profile in a pseudo-terminal so the gateway 
 3. waits for the woken agent to push Version 2 once, reply on each Thread citing it, and resolve
    both.
 
+`make live-loop SCENARIO=decide` (`--scenario decide`) checks Questions and Markups instead: the
+agent shares a plan with a decisions table (D1 and D2); the owner answers both, draws a red cross
+over D1's text (a Markup with no words) and chooses Send back; the run waits for Version 2 to
+record both answers in its `Decided` cells, the drawing to be opened with `annotary_markup` (its
+file is saved), and a reply on the drawing's Thread that describes it.
+
 It prints a JSON report (timings, every reply) and exits 0 only when the agent did all of it. It
 needs the plugin installed and wake-ups on for the profile (`hermes annotary wake on`). It uses
 the profile's model; `--model` overrides it for one session.

@@ -263,6 +263,25 @@ is in the maintainer's private plan.
   wake a Bot, and a mention wake says not to resolve the asker's Thread; rejected a lower cap,
   which would still spend the person's turns on chatter.
 
+## 2026-11-20: Annotary v0.8.0
+
+- **Pinned Annotary v0.8.0.** It brings Markups (a drawing made in the iPhone and iPad app, kept
+  on a Comment as a PNG and its strokes) and Questions (a decisions table in the Markdown, or a
+  Question asked on a Thread, answered with a tap). v0.7.1 (the skill asks the person instead of
+  waiting on a review handoff) and v0.7.2 (a release-tooling fix) change nothing the plugin uses.
+  The embed contract is unchanged: no new `annotary-*` message (`embed.js` is untouched), no new
+  forwarded header (`embed.rs`'s headers, `PART_MAX` 384 KiB and `IMAGE_MAX` 700 KiB are as in
+  v0.7.0), and the header still folds at 850 px, so `bridge.py`'s `FORWARD`, `PART_MAX` and
+  `FRAME_ACTIONS_MIN_WIDTH` stay. The frame fetches a Markup image like an avatar (`data-cd-mk`,
+  a binary GET through `/proxy`) and answers with a `PUT …/questions/{key}/answer` with a JSON
+  body, both of which the bridge already carries. A loopback embed render of the v0.8.0 binary,
+  driven in Chromium at 1,200 and 700 px with the plugin's own `bridge.request` as the frame's
+  backend: a table Question answered, **Accept recommended** (in the header at 1,200 px, in the
+  header's overlay at 700 px, as on the web), a mid-review Question answered from its card, and
+  the Markup image loaded in its card. The Document page grows by about 2 KB
+  (`perf/size-report.json`). Each tarball was checked against the release's `sha256.sum` and with
+  `gh attestation verify` (annotary's `release.yml` at `refs/tags/v0.8.0`).
+
 ## 2026-11-17: Annotary v0.7.0
 
 - **Pinned Annotary v0.7.0.** It brings the web's Copy link, whole-Document comments, a Mentions
@@ -402,3 +421,42 @@ The same three guards as annotary's, so one rule reads the same in every Annotar
   rejected new names because every body written to the old check would fail. The template's
   `.github/workflows/surfaces.yml` (`scripts/standard/surfaces.py pr`) replaces the repo's own
   script and its test; the job name stays `surfaces`, so the ruleset is unchanged.
+
+## 2026-11-20: Markups and Questions for agents
+
+- **`annotary_markup` returns Hermes's multimodal tool result.** Chose the envelope
+  `{"_multimodal": true, "content": [text, image_url…], "text_summary"}` that Hermes's public
+  `tools/registry.py` (`_normalize_handler_result`) accepts from any handler, and that its agent
+  turns into `text_summary` for a model or provider that cannot take an image in a tool result;
+  rejected calling Hermes's own vision gate (`vision_tools._native_tool_result_images`), which is
+  Hermes internals. The plugin's handler JSON-encodes every other result as before. The
+  `text_summary` names each saved PNG and the Thread's quoted source text, so such a model can open
+  the file with `vision_analyze`. At most four images go in one result; every path is named.
+- **The images are saved under the profile's own plugin folder**
+  (`<profile home>/plugin-data/annotary/markup/<document>/`), written by the CLI's
+  `thread show --markup DIR`, kept to the newest 40 and none older than 7 days; rejected a
+  temporary folder because `vision_analyze` may open the file in a later turn, and `~/.annotary`
+  because the plugin never touches it. The README discloses it.
+- **No new tool for the decisions table.** `annotary_read` returns the text `pull` hands back
+  (the head's Answers written into the `Decided` cells) and says how many it filled;
+  `annotary_comment` anchors on the Version's own bytes (`pull --as-pushed`), since a filled cell
+  shifts that row's columns. A push the CLI refuses with `answers_missing` comes back as
+  `{refused, reason, rows}`; the plugin never passes `--discard-answers`. Rejected a tool that
+  writes the answers in for the agent, which would be a second `pull`.
+- **A mid-review Question is `options` on `annotary_comment`** (`thread new … --ask`), 2 to 6
+  distinct labels of at most 80 characters; rejected an `annotary_ask` tool because two new tools
+  do not fit the tool schemas' ceiling (5,728 of 5,800 bytes with one).
+- **The `questions:` line comes from the CLI.** `annotary_threads` and the wake-up digest take it
+  from `show DOC` (`D4=B D5=- t9=A*`), and each Question Thread's `answer` from that line; rejected
+  formatting it from the JSON here, which would drift from annotary's `show`.
+- **An Answer wakes nobody (D5 as written).** `question.answered` is not a comment, so
+  `rules.decide` ignores it and it neither opens a review nor blocks a push; a Markup is a
+  `thread.created` / `thread.replied` with `markup: true`, a plain comment. Send back and Approve
+  wake as before, and their message carries the Questions line, with what to do about the answers
+  (start the push from `annotary_read`'s text; after Approve, save that text and do not push).
+- **The cards show Questions read-only.** The chat card's line gains "2 of 5 answered" and keeps
+  its one Open button; the native fallback view lists each Question with its options and Answers
+  and shows a Comment's Markup image (fetched through `/proxy`, as the frame does). Answering is
+  the embedded page's; `/doc` carries `questions` only when the Document has one, so its answer
+  is unchanged otherwise.
+

@@ -162,3 +162,52 @@ def test_the_exit_code_needs_the_agent_done_and_nothing_left_behind(hermes, monk
     monkeypatch.setattr(live_loop, "clean_up", lambda *a: left)
     monkeypatch.setattr(sys, "argv", ["live_loop", "--profile", "coder"])
     assert live_loop.main() == code
+
+
+# ------------------------------------------------------------------ the decide scenario
+
+
+def table(d1=None, d2=None):
+    return [{"key": "D1", "source": "table", "decided": d1}, {"key": "D2", "source": "table", "decided": d2},
+            {"key": "t9", "source": "thread", "decided": None}]
+
+
+def test_decide_is_done_when_v2_records_both_answers_and_the_drawing_is_opened_and_described():
+    drawing = [{"id": "t3", "replies": [{"author": "coder", "body": "Done in v2: you crossed out D1's text, so I cut it."}]}]
+    assert live_loop.decide_status(2, table("B (@owner)", "A (@owner)"), drawing, "coder", "t3", True)["done"]
+    for version, qs, opened, threads in [
+            (1, table("B", "A"), True, drawing),           # not pushed yet
+            (2, table("B", None), True, drawing),          # an answer not recorded
+            (2, table("B", "A"), False, drawing),          # never looked at the image
+            (2, table("B", "A"), True, [{"id": "t3", "replies": [{"author": "coder", "body": "Thanks."}]}]),
+            (2, table("B", "A"), True, [{"id": "t4", "replies": drawing[0]["replies"]}])]:  # another Thread
+        assert not live_loop.decide_status(version, qs, threads, "coder", "t3", opened)["done"]
+
+
+def test_the_owner_decides_answers_draws_on_the_first_question_and_sends_back(hermes):
+    from test_questions_markup import PLAN
+    accounts_reconcile()
+    doc = share_as("coder", "Wiki decide")
+    path = Path(state.load()["docs"][doc]["path"])
+    path.write_text(PLAN)
+    tools.push_version(tools.Caller("coder"), doc=doc, path=str(path))
+    owner = server.owner_token()
+    drawn = live_loop.owner_decides(owner, doc)
+    line = server.run_cli(owner, ["show", doc]).stdout
+    assert "questions: D1=B D2=A" in line
+    t = server.api(owner, "GET", f"/api/v1/docs/{doc}/threads")["threads"]
+    (mk,) = [x for x in t if x["id"] == drawn]
+    assert mk["markup"]["width"] == 360 and mk["anchor"]["original"]["exact"].startswith("## D1")
+    assert server.api(owner, "GET", f"/api/v1/docs/{doc}")["action"]["id"] == "send-back"
+
+
+def test_the_owner_decides_refuses_a_document_without_the_table(hermes):
+    accounts_reconcile()
+    doc = share_as("coder", "No table")
+    with pytest.raises(live_loop.StepFailed, match="no decisions table rows D1, D2"):
+        live_loop.owner_decides(server.owner_token(), doc)
+
+
+def accounts_reconcile():
+    from annotary_hermes import accounts
+    accounts.reconcile()
