@@ -143,7 +143,7 @@ def test_a_failed_review_fails_the_run_at_once_and_still_cleans_up(hermes, monke
     monkeypatch.setattr(server, "run_cli", lambda tok, args, **kw: done(out=tok, err="act refused")
                         if args[0] == "act" else real(tok, args, **kw))
     monkeypatch.setattr(live_loop, "Session", FakeSession)
-    monkeypatch.setattr(time, "sleep", lambda s: None)
+    monkeypatch.setattr(live_loop, "sleep", lambda s: None)
     monkeypatch.setattr(sys, "argv", ["live_loop", "--profile", "coder", "--timeout", "30", "--label", "t"])
     started = time.time()
     assert live_loop.main() == 1
@@ -215,3 +215,81 @@ def test_the_owner_decides_refuses_a_document_without_the_table(hermes):
 def accounts_reconcile():
     from annotary_hermes import accounts
     accounts.reconcile()
+
+
+# ------------------------------------------------------------------ each phase has its own clock
+
+
+class Clock:
+    """Fake time for the run: sleep advances it, and a slow agent can too."""
+
+    def __init__(self):
+        self.t = 1000.0
+
+    def now(self):
+        return self.t
+
+    def sleep(self, s):
+        self.t += s
+
+
+def run_with(monkeypatch, capsys, session, *argv):
+    clock = Clock()
+    monkeypatch.setattr(live_loop, "now", clock.now)
+    monkeypatch.setattr(live_loop, "sleep", clock.sleep)
+    session.clock = clock
+    monkeypatch.setattr(live_loop, "Session", session)
+    order = []
+    real_clean = live_loop.clean_up
+    monkeypatch.setattr(session, "close", lambda self: order.append("close"))
+    monkeypatch.setattr(live_loop, "clean_up", lambda *a: (order.append("clean"), real_clean(*a))[1])
+    monkeypatch.setattr(sys, "argv", ["live_loop", "--profile", "coder", "--label", "t", *argv])
+    code = live_loop.main()
+    out = capsys.readouterr()
+    return code, json.loads(out.out), out.err, order
+
+
+class SlowShare(FakeSession):
+    """Shares after 150 s, then never answers the review."""
+
+    def type(self, text):
+        SlowShare.clock.t += 150
+        SlowShare.made = share_as("coder", "Wiki move")
+
+
+class NeverShares(FakeSession):
+    def type(self, text):
+        pass
+
+
+def test_a_slow_share_still_leaves_the_review_loop_its_whole_limit(hermes, monkeypatch, capsys):
+    code, report, err, order = run_with(monkeypatch, capsys, SlowShare, "--share-timeout", "200", "--timeout", "120")
+    assert code == 1 and report["done"] is False and report["timed_out"] == "review loop"
+    at = {what: t for t, what in report["events"]}
+    sent = next(t for w, t in at.items() if w.startswith("two comments"))
+    (end,) = [t for w, t in at.items() if w.startswith("timed out")]
+    assert end - sent >= 120
+    assert "timed out in the review loop after 120 s" in err
+    assert order == ["close", "clean"]  # the session (and the turn in it) ends before its Document goes
+
+
+def test_a_share_that_never_comes_times_out_in_its_own_phase(hermes, monkeypatch, capsys):
+    code, report, err, order = run_with(monkeypatch, capsys, NeverShares, "--share-timeout", "200", "--timeout", "120")
+    assert code == 1 and report["timed_out"] == "share"
+    assert "timed out in the share after 200 s" in err
+    assert report["events"][-1][0] < 200 + 15 + 10  # the loop's limit was never spent
+    assert order == ["close", "clean"]
+
+
+def test_clean_up_drops_missed_wake_ups_for_the_documents_it_removed(hermes):
+    before = set(state.load()["docs"])
+    earlier = next(iter(before), None)
+    mine = share_as("coder", "Mine")
+
+    def queue(st):
+        st["pending"]["coder"] = [{"doc": mine, "reason": "send-back"}, {"doc": earlier or "other", "reason": "mention"}]
+        st["agent_wakes"][mine] = [1.0]
+    state.update(queue)
+    assert live_loop.clean_up(server.owner_token(), "coder", before) == []
+    st = state.load()
+    assert [w["doc"] for w in st["pending"]["coder"]] == [earlier or "other"] and mine not in st["agent_wakes"]

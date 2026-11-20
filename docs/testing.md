@@ -27,13 +27,21 @@ over D1's text (a Markup with no words) and chooses Send back; the run waits for
 record both answers in its `Decided` cells, the drawing to be opened with `annotary_markup` (its
 file is saved), and a reply on the drawing's Thread that describes it.
 
+Each phase has its own limit, so a slow share does not eat the review's time: `--share-timeout`
+(default 600 s) from the ask until the Document is shared, `--timeout` (default 900 s) from Send
+back until the agent is done; the whole run is bounded by their sum plus the start-up and the
+owner's steps. A timeout names its phase on stderr and in the report (`timed_out`: `share` or
+`review loop`).
+
 It prints a JSON report (timings, every reply) and exits 0 only when the agent did all of it. It
 needs the plugin installed and wake-ups on for the profile (`hermes annotary wake on`). It uses
 the profile's model; `--model` overrides it for one session.
 
 The session runs in a temporary folder, so files the agent writes stay out of your checkout. At
 the end, every Document the profile shared during the run is permanently removed: from the
-server, its staged files and its entry in `state.json`. Do not use the profile for real work
+server, its staged files, its entry in `state.json` and any missed wake-up queued for it. The
+session is closed first (SIGTERM, then its terminal, then SIGKILL), which ends a turn still
+running in it, so nothing acts on a removed Document. Do not use the profile for real work
 while the loop runs, or that work goes too. Earlier Documents and other profiles' are left alone.
 A failed owner step stops the run at once, and a Document that cannot be removed fails the run
 and is named on stderr.

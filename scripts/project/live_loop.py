@@ -13,7 +13,11 @@ Questions, draws a Markup (a red cross over the first Question's text, with no w
 Send back; the run waits for Version 2 to record both answers in its Decided cells, the drawing to
 be opened with annotary_markup, and a reply on the drawing's Thread that describes it.
 
-    python3 scripts/project/live_loop.py --profile coder [--model MODEL] [--timeout 900] [--scenario decide]
+Each phase has its own limit, so a slow share never eats the review's time: `--share-timeout`
+from the ask to the shared Document, `--timeout` from Send back to done. A timeout names its phase.
+
+    python3 scripts/project/live_loop.py --profile coder [--model MODEL] [--share-timeout 600] [--timeout 900]
+        [--scenario decide]
 """
 
 from __future__ import annotations
@@ -34,6 +38,9 @@ import zlib
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+#: The clock and the pause between polls; the tests replace both.
+now, sleep = time.monotonic, time.sleep
 
 COMMENTS = ("Add a rollback step in case the new host fails.",
             "Which week does step 2 happen? Put a date on it.")
@@ -93,6 +100,17 @@ def cross_png(w: int = 360, h: int = 120) -> bytes:
     ihdr = w.to_bytes(4, "big") + h.to_bytes(4, "big") + bytes((8, 2, 0, 0, 0))
     return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", zlib.compress(b"".join(rows)))
             + chunk(b"IEND", b""))
+
+
+def wait_for(limit: float, check, every: float):
+    """Call *check* until it returns ``(True, value)`` or *limit* seconds of this phase pass.
+    Returns ``(finished, value)`` from the last call."""
+    end = now() + limit
+    while True:
+        finished, value = check()
+        if finished or now() >= end:
+            return finished, value
+        sleep(every)
 
 
 class StepFailed(Exception):
@@ -164,8 +182,13 @@ def clean_up(owner: str, profile: str, before: set[str]) -> list[str]:
         removed.append(doc)
 
     def forget(st: dict) -> None:
+        # Nothing of a removed Document stays to be handed to the profile's next tool call.
         for doc in removed:
             st["docs"].pop(doc, None)
+            st["agent_wakes"].pop(doc, None)
+        if profile in st["pending"]:
+            st["pending"][profile] = [w for w in st["pending"][profile]
+                                      if not (isinstance(w, dict) and w.get("doc") in removed)]
     state.update(forget)
     print(f"removed {len(removed)} Document(s): {' '.join(removed)}", file=sys.stderr, flush=True)
     return failed
@@ -224,14 +247,14 @@ class Session:
 def run_loop(args: argparse.Namespace, sess: Session, owner: str, before: set[str]) -> int:
     from annotary_hermes import accounts, server, state
     author = accounts.handle_of(args.profile) or args.profile
-    t0 = time.time()
+    t0 = now()
     events: list[tuple[float, str]] = []
 
     def stamp(what: str) -> None:
-        events.append((round(time.time() - t0, 1), what))
-        print(f"[{time.time() - t0:6.1f}s] {what}", file=sys.stderr, flush=True)
+        events.append((round(now() - t0, 1), what))
+        print(f"[{now() - t0:6.1f}s] {what}", file=sys.stderr, flush=True)
 
-    time.sleep(15)  # the interactive CLI's start-up
+    sleep(15)  # the interactive CLI's start-up
     if args.scenario == "decide":
         sess.type(f"Write a short plan for moving the team wiki to a new host with two decisions: D1, where it "
                   f"runs (A: the existing box, B: a new VM), and D2, when (A: this week, B: next week). Give "
@@ -243,18 +266,18 @@ def run_loop(args: argparse.Namespace, sess: Session, owner: str, before: set[st
                   f"a new host, then share it with me for review using Annotary. Name it "
                   f"'Wiki move {args.label}'.\n")
     stamp("asked for a plan")
-    doc = None
-    while time.time() - t0 < args.timeout and not doc:
+
+    def shared():
         new = new_documents(state.load()["docs"], before, args.profile)
-        doc = new[0] if new else None
-        time.sleep(2)
+        return bool(new), new[0] if new else None
+    _, doc = wait_for(args.share_timeout, shared, 2)
     if not doc:
-        stamp("no Document shared")
-        print(json.dumps({"done": False, "events": events}, indent=1))
+        stamp(f"no Document shared: timed out in the share after {args.share_timeout:.0f} s")
+        print(json.dumps({"done": False, "timed_out": "share", "events": events}, indent=1))
         return 1
     stamp(f"shared {doc}")
     if args.scenario == "decide":
-        return decide_loop(args, owner, doc, author, t0, events, stamp)
+        return decide_loop(args, owner, doc, author, events, stamp)
     try:
         send_back(owner, doc)
     except StepFailed as e:
@@ -262,26 +285,29 @@ def run_loop(args: argparse.Namespace, sess: Session, owner: str, before: set[st
         print(json.dumps({"done": False, "doc": doc, "error": str(e), "events": events}, indent=1))
         return 1
     stamp("two comments, then Send back")
-    status: dict = {}
-    while time.time() - t0 < args.timeout:
+
+    def reviewed():
         head = server.api(owner, "GET", f"/api/v1/docs/{doc}")
         threads = server.api(owner, "GET", f"/api/v1/docs/{doc}/threads?status=all")["threads"]
         status = loop_status(int(head.get("version") or 0), threads, author)
-        if status["done"]:
-            break
-        time.sleep(5)
-    stamp("done" if status.get("done") else "timed out")
+        return status["done"], status
+    _, status = wait_for(args.timeout, reviewed, 5)
+    stamp("done" if status["done"] else timed_out(args))
     threads = server.api(owner, "GET", f"/api/v1/docs/{doc}/threads?status=all")["threads"]
     print(json.dumps({
-        "done": status.get("done", False), "doc": doc, "model": args.model or "(profile default)",
-        "events": events, "status": status,
+        "done": status["done"], "doc": doc, "model": args.model or "(profile default)",
+        **({} if status["done"] else {"timed_out": "review loop"}), "events": events, "status": status,
         "threads": [{"id": t.get("id"), "comment": t.get("body"), "resolved": bool(t.get("resolved")),
                      "replies": [f"@{r.get('author')}: {r.get('body')}" for r in t.get("replies") or []]}
                     for t in threads]}, indent=1))
-    return 0 if status.get("done") else 1
+    return 0 if status["done"] else 1
 
 
-def decide_loop(args: argparse.Namespace, owner: str, doc: str, author: str, t0: float, events: list,
+def timed_out(args: argparse.Namespace) -> str:
+    return f"timed out in the review loop after {args.timeout:.0f} s (from Send back)"
+
+
+def decide_loop(args: argparse.Namespace, owner: str, doc: str, author: str, events: list,
                 stamp) -> int:
     from annotary_hermes import paths, server
     try:
@@ -291,27 +317,30 @@ def decide_loop(args: argparse.Namespace, owner: str, doc: str, author: str, t0:
         print(json.dumps({"done": False, "doc": doc, "error": str(e), "events": events}, indent=1))
         return 1
     stamp(f"answered {' '.join(f'{k}={v}' for k, v in DECIDE_ANSWERS.items())}, drew {drawn}, then Send back")
-    status: dict = {}
-    while time.time() - t0 < args.timeout:
+
+    def decided():
         version = int(server.api(owner, "GET", f"/api/v1/docs/{doc}").get("version") or 0)
         questions = server.api(owner, "GET", f"/api/v1/docs/{doc}/questions?version={version}").get("questions") or []
         threads = server.api(owner, "GET", f"/api/v1/docs/{doc}/threads?status=all")["threads"]
         opened = (paths.markup_dir(args.profile) / doc / f"{drawn}.png").is_file()
         status = decide_status(version, questions, threads, author, drawn, opened)
-        if status["done"]:
-            break
-        time.sleep(5)
-    stamp("done" if status.get("done") else "timed out")
-    print(json.dumps({"done": status.get("done", False), "doc": doc, "scenario": "decide",
-                      "model": args.model or "(profile default)", "events": events, "status": status}, indent=1))
-    return 0 if status.get("done") else 1
+        return status["done"], status
+    _, status = wait_for(args.timeout, decided, 5)
+    stamp("done" if status["done"] else timed_out(args))
+    print(json.dumps({"done": status["done"], "doc": doc, "scenario": "decide",
+                      "model": args.model or "(profile default)", **({} if status["done"] else {"timed_out": "review loop"}),
+                      "events": events, "status": status}, indent=1))
+    return 0 if status["done"] else 1
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--profile", default="coder")
     ap.add_argument("--model", default="", help="override the profile's model for this session")
-    ap.add_argument("--timeout", type=float, default=900)
+    ap.add_argument("--share-timeout", type=float, default=600,
+                    help="seconds from the ask until the agent has shared its Document")
+    ap.add_argument("--timeout", type=float, default=900,
+                    help="seconds from Send back until the agent has done the review loop")
     ap.add_argument("--label", default=time.strftime("%H%M%S"))
     ap.add_argument("--scenario", choices=("review", "decide"), default="review",
                     help="review: comments, Send back, push, replies; decide: a decisions table and a Markup")
