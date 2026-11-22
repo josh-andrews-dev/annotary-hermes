@@ -33,7 +33,7 @@ what a change must keep.
   Never copy the page there by hand (the old standalone copy is only ever removed,
   `desktop.retire_standalone_page`). Plain ESM importing only `@hermes/plugin-sdk`, `react`,
   `react/jsx-runtime`; no build step.
-- The repo will be public: no host names, email addresses or home paths anywhere in it.
+- The repo is public: no host names, email addresses or home paths anywhere in it.
 
 ## Hit every surface
 

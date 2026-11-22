@@ -253,6 +253,12 @@ is in the maintainer's private plan.
   agent-to-agent DMs use it), only when the person allowed wake-ups for that profile; rejected
   leaving it a notification, because an @mention of a Bot that never used Annotary then never
   reached it: Hermes refuses a key-less `inject_message` from a plugin's thread.
+- **The Bot Chat turn drops a named list of Hermes variables, not every `HERMES_*`.** Chose
+  `watcher._APPROVAL_ENV` (YOLO, the session, cron and ask markers, all five launch flags and the
+  behavior variables) plus the `HERMES_SESSION_` prefix, so the turn runs under the profile's own
+  policy and not the gateway's; rejected stripping every `HERMES_*` because the child needs
+  `HERMES_HOME` and the other variables that pick the profile and install, and rejected stripping
+  only `HERMES_ACCEPT_HOOKS` because the other launch flags would still carry over.
 - **A profile's own install is on when its code matches the default profile's.** Hermes's
   "Install here" puts a real folder in each profile, so only one whose plugin files differ (a clone
   made before an update) is a different copy; rejected treating every non-link folder as stale, which
