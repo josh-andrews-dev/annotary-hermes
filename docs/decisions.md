@@ -496,3 +496,14 @@ The same three guards as annotary's, so one rule reads the same in every Annotar
   tool call triggers, which would cost a request per profile on every pass; `doctor` itself reports
   and does not repair, so its FAIL names the fix (`hermes annotary setup`).
 
+
+## 2026-11-26: repo-standard v0.21.0 and the `copy` check
+
+- **`copy` is a required status check** beside `ci`, `lessons`, `size`, `surfaces`,
+  `private-check` and `private-check-fork`, added to the `main` ruleset with `gh api` once
+  `copy.yml` was on `main`, as `size` and `surfaces` were.
+- **The pull request template gains `## Copy` by hand.** The template renders its own
+  `pull_request_template.md` only for the full tier; this repo is lighter and owns its template.
+- **The always-loaded ratchet rises from 8,127 to 8,361 bytes,** the size of the template's new
+  `copy` gate line in `.agents/rules/standard.md`; rejected trimming `AGENTS.md` to fit because
+  its rules are all still live.
