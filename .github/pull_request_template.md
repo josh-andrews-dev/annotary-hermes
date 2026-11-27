@@ -20,6 +20,10 @@
 - Agents: not affected: the tools, skill and wake-ups are unchanged
 -->
 
+## Copy
+
+<!-- How the user-facing text this change adds or changes was written (the copy pass's record), or "None: <why>". The required `copy` check fails until this section has text, and on None when the change adds lines to a product-text path (README.md, docs/, release notes). -->
+
 <!-- If a number in perf/size-report.json grew, add a line "Size growth: why" (the `size` check). -->
 
 ## Lessons
